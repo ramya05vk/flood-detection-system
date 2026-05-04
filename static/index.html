@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FloodWatch India - Coastal & Inland Flood Monitoring</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a1a; color: #eee; }
+        .header { background: #0f0f1a; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #e94560; flex-wrap: wrap; }
+        .header h1 { font-size: 1.5rem; }
+        .header h1 span { color: #e94560; }
+        .badge { background: #e94560; padding: 5px 10px; border-radius: 20px; font-size: 0.7rem; margin-left: 10px; }
+        .coastal-badge { background: #1e88e5; padding: 5px 10px; border-radius: 20px; font-size: 0.7rem; margin-left: 10px; }
+        .container { display: flex; height: calc(100vh - 70px); }
+        .sidebar { width: 450px; background: #16213e; padding: 20px; overflow-y: auto; border-right: 1px solid #0f3460; }
+        .map-container { flex: 1; position: relative; }
+        #map { height: 100%; width: 100%; }
+        .section-title { color: #e94560; margin: 15px 0 10px 0; font-size: 0.9rem; border-left: 3px solid #e94560; padding-left: 10px; }
+        .city-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-height: 300px; overflow-y: auto; }
+        .city-btn { background: #0f3460; border: none; padding: 10px 15px; border-radius: 8px; color: white; cursor: pointer; text-align: left; transition: all 0.3s; }
+        .city-btn:hover, .city-btn.active { background: #e94560; transform: translateX(5px); }
+        .coastal-city { border-left: 3px solid #1e88e5; }
+        .city-name { font-weight: bold; }
+        .city-state { font-size: 0.7rem; opacity: 0.7; }
+        .coastal-tag { font-size: 0.6rem; background: #1e88e5; padding: 2px 6px; border-radius: 10px; margin-left: 8px; }
+        .info-panel { background: #0f0f1a; border-radius: 12px; padding: 15px; margin-top: 15px; }
+        .risk-tag { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
+        .risk-critical { background: #8b0000; }
+        .risk-high { background: #e94560; }
+        .risk-medium { background: #ffa500; color: #1a1a2e; }
+        .risk-low { background: #ffd700; color: #1a1a2e; }
+        .risk-normal { background: #2e8b57; }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
+        .stat-card { background: #0f3460; padding: 10px; border-radius: 8px; text-align: center; }
+        .stat-value { font-size: 1.3rem; font-weight: bold; color: #e94560; }
+        .impact-card { background: #0f3460; padding: 10px; border-radius: 8px; margin: 8px 0; }
+        .forecast-item { display: inline-block; background: #1a1a3e; padding: 5px 10px; border-radius: 8px; margin: 2px; }
+        .map-controls { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 450px; }
+        .map-controls button { background: #0f3460; border: none; padding: 6px 8px; border-radius: 5px; color: white; cursor: pointer; font-size: 0.65rem; transition: all 0.2s; }
+        .map-controls button:hover { background: #e94560; }
+        .map-controls .active-layer { background: #e94560; border: 1px solid white; }
+        .loading { text-align: center; padding: 20px; color: #e94560; }
+        .legend { position: absolute; bottom: 20px; left: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; font-size: 0.7rem; }
+        .legend-color { display: inline-block; width: 20px; height: 10px; margin-right: 5px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <h1>🌊 <span>FloodWatch</span> India</h1>
+            <span class="badge">🚀 Sentinel-1 + Sentinel-2</span>
+            <span class="coastal-badge">🏖️ Coastal Monitoring Included</span>
+            <span class="badge">🛣️ OSM Roads & Buildings</span>
+        </div>
+    </div>
+    <div class="container">
+        <div class="sidebar">
+            <h3>📍 Flood-Prone Cities</h3>
+            <div class="city-list" id="cityList">
+                <div class="loading">Loading cities...</div>
+            </div>
+            
+            <div id="infoPanel">
+                <div class="info-panel">
+                    <p>Select a city to view flood analysis.</p>
+                    <p style="font-size:0.7rem; margin-top:10px;">📊 <strong>Available Layers:</strong><br>
+                    • 🖼️ True Color (Sentinel-2 Optical)<br>
+                    • 💧 Water Bodies (NDWI - BLUE = water)<br>
+                    • 📡 SAR Before (90 days ago - normal)<br>
+                    • 📡 SAR Current (last 15 days)<br>
+                    • 🔴 Flood Extent (BRIGHT RED = flooded areas)<br>
+                    • 🛣️ OSM Roads (Yellow - evacuation routes)<br>
+                    • 🏠 OSM Buildings (Orange - infrastructure at risk)</p>
+                </div>
+            </div>
+        </div>
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="legend">
+                <strong>Legend</strong><br>
+                <span class="legend-color" style="background:#0000FF;"></span> Water Bodies (NDWI)<br>
+                <span class="legend-color" style="background:#FF0000;"></span> Flood Extent (Active Flood)<br>
+                <span class="legend-color" style="background:#808080;"></span> SAR Radar<br>
+                <span class="legend-color" style="background:#FFFFFF;"></span> SAR (Bright = Dry Land)<br>
+                <span class="legend-color" style="background:#000000;"></span> SAR (Dark = Water)<br>
+                <span class="legend-color" style="background:#FFFF00;"></span> OSM Roads<br>
+                <span class="legend-color" style="background:#FFA500;"></span> OSM Buildings
+            </div>
+            <div class="map-controls" id="mapControls">
+                <button id="btnTrueColor" onclick="setActiveLayer('truecolor')">🖼️ True Color</button>
+                <button id="btnWater" onclick="setActiveLayer('water')">💧 Water Bodies</button>
+                <button id="btnBefore" onclick="setActiveLayer('before')">📡 SAR Before</button>
+                <button id="btnCurrent" onclick="setActiveLayer('current')">📡 SAR Current</button>
+                <button id="btnFlood" onclick="setActiveLayer('flood')">🔴 Flood Extent</button>
+                <button id="btnRoads" onclick="toggleOSMRoads()">🛣️ Roads (OSM)</button>
+                <button id="btnBuildings" onclick="toggleOSMBuildings()">🏠 Buildings (OSM)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // VARIABLES
+        // ============================================
+        var map = L.map('map').setView([23.5, 85.0], 5);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OSM contributors'
+        }).addTo(map);
+
+        let cities = [];
+        let currentCity = null;
+        let currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
+        
+        // OSM layer variables
+        let currentRoadsLayer = null;
+        let roadsVisible = false;
+        let currentBuildingsLayer = null;
+        let buildingsVisible = false;
+
+        // ============================================
+        // LOAD CITIES FROM API
+        // ============================================
+        async function loadCities() {
+            try {
+                const response = await fetch('/api/cities');
+                const data = await response.json();
+                cities = data.cities;
+                displayCityList();
+                addMarkers();
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('cityList').innerHTML = '<div class="loading">❌ Error loading cities</div>';
+            }
+        }
+
+        function displayCityList() {
+            const container = document.getElementById('cityList');
+            container.innerHTML = '';
+            // Sort: coastal first, then by name
+            const sortedCities = [...cities].sort((a, b) => (b.coastal ? 1 : 0) - (a.coastal ? 1 : 0));
+            sortedCities.forEach(city => {
+                const btn = document.createElement('button');
+                btn.className = `city-btn ${city.coastal ? 'coastal-city' : ''}`;
+                btn.innerHTML = `<div class="city-name">${city.name} ${city.coastal ? '<span class="coastal-tag">🏖️ Coastal</span>' : ''}</div><div class="city-state">${city.state}</div>`;
+                btn.onclick = () => selectCity(city);
+                container.appendChild(btn);
+            });
+        }
+
+        function addMarkers() {
+            cities.forEach(city => {
+                const icon = city.coastal ? '🏖️' : '📍';
+                const marker = L.marker([city.lat, city.lon]).addTo(map);
+                marker.bindPopup(`<b>${icon} ${city.name}</b><br>${city.state}<br>${city.coastal ? '🏖️ Coastal City' : '🏙️ Inland City'}<br><button onclick="selectCityByName('${city.name}')" style="background:#e94560; border:none; padding:5px 10px; border-radius:5px; color:white; cursor:pointer;">Analyze Flood Risk</button>`);
+            });
+        }
+
+        window.selectCityByName = function(name) {
+            const city = cities.find(c => c.name === name);
+            if (city) selectCity(city);
+        };
+
+        // ============================================
+        // MAP LAYER FUNCTIONS
+        // ============================================
+        function clearAllLayers() {
+            if (currentLayers.truecolor) map.removeLayer(currentLayers.truecolor);
+            if (currentLayers.water) map.removeLayer(currentLayers.water);
+            if (currentLayers.before) map.removeLayer(currentLayers.before);
+            if (currentLayers.current) map.removeLayer(currentLayers.current);
+            if (currentLayers.flood) map.removeLayer(currentLayers.flood);
+        }
+
+        function setActiveLayer(layerType) {
+            clearAllLayers();
+            document.querySelectorAll('.map-controls button').forEach(btn => btn.classList.remove('active-layer'));
+            
+            if (layerType === 'truecolor' && currentLayers.truecolor) {
+                currentLayers.truecolor.addTo(map);
+                document.getElementById('btnTrueColor').classList.add('active-layer');
+            } else if (layerType === 'water' && currentLayers.water) {
+                currentLayers.water.addTo(map);
+                document.getElementById('btnWater').classList.add('active-layer');
+            } else if (layerType === 'before' && currentLayers.before) {
+                currentLayers.before.addTo(map);
+                document.getElementById('btnBefore').classList.add('active-layer');
+            } else if (layerType === 'current' && currentLayers.current) {
+                currentLayers.current.addTo(map);
+                document.getElementById('btnCurrent').classList.add('active-layer');
+            } else if (layerType === 'flood' && currentLayers.flood) {
+                currentLayers.flood.addTo(map);
+                document.getElementById('btnFlood').classList.add('active-layer');
+            }
+        }
+
+        window.setActiveLayer = setActiveLayer;
+
+        // ============================================
+        // OSM ROADS FUNCTIONS
+        // ============================================
+        async function addOSMRoads(cityLat, cityLon) {
+            if (currentRoadsLayer) {
+                map.removeLayer(currentRoadsLayer);
+            }
+            
+            const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];way(around:5000,${cityLat},${cityLon})["highway"];out geom;`;
+            
+            try {
+                const response = await fetch(overpassUrl);
+                const data = await response.json();
+                
+                currentRoadsLayer = L.geoJSON(data, {
+                    style: { color: '#ffff00', weight: 2, opacity: 0.8 },
+                    onEachFeature: function(feature, layer) {
+                        const roadName = feature.tags?.name || 'Unnamed road';
+                        const roadType = feature.tags?.highway || 'unknown';
+                        layer.bindPopup(`🛣️ ${roadName}<br>Type: ${roadType}`);
+                    }
+                }).addTo(map);
+                
+                console.log(`Added ${data.elements.length} roads to map`);
+            } catch (error) {
+                console.error('Error loading OSM roads:', error);
+            }
+        }
+
+        function toggleOSMRoads() {
+            if (!currentCity) {
+                alert('Please select a city first');
+                return;
+            }
+            
+            roadsVisible = !roadsVisible;
+            if (roadsVisible) {
+                addOSMRoads(currentCity.lat, currentCity.lon);
+                document.getElementById('btnRoads').classList.add('active-layer');
+            } else {
+                if (currentRoadsLayer) {
+                    map.removeLayer(currentRoadsLayer);
+                    document.getElementById('btnRoads').classList.remove('active-layer');
+                }
+            }
+        }
+
+        // ============================================
+        // OSM BUILDINGS FUNCTIONS
+        // ============================================
+        async function addOSMBuildings(cityLat, cityLon) {
+            if (currentBuildingsLayer) {
+                map.removeLayer(currentBuildingsLayer);
+            }
+            
+            const overpassUrl = `https://overpass-api.de/api/interpreter?data=[out:json];way(around:5000,${cityLat},${cityLon})["building"];out geom;`;
+            
+            try {
+                const response = await fetch(overpassUrl);
+                const data = await response.json();
+                
+                currentBuildingsLayer = L.geoJSON(data, {
+                    style: { color: '#ffa500', weight: 1, fillOpacity: 0.3, fillColor: '#ffa500' },
+                    onEachFeature: function(feature, layer) {
+                        const buildingType = feature.tags?.building || 'unknown';
+                        const buildingName = feature.tags?.name || '';
+                        layer.bindPopup(`🏠 ${buildingName}<br>Type: ${buildingType}`);
+                    }
+                }).addTo(map);
+                
+                console.log(`Added ${data.elements.length} buildings to map`);
+            } catch (error) {
+                console.error('Error loading OSM buildings:', error);
+            }
+        }
+
+        function toggleOSMBuildings() {
+            if (!currentCity) {
+                alert('Please select a city first');
+                return;
+            }
+            
+            buildingsVisible = !buildingsVisible;
+            if (buildingsVisible) {
+                addOSMBuildings(currentCity.lat, currentCity.lon);
+                document.getElementById('btnBuildings').classList.add('active-layer');
+            } else {
+                if (currentBuildingsLayer) {
+                    map.removeLayer(currentBuildingsLayer);
+                    document.getElementById('btnBuildings').classList.remove('active-layer');
+                }
+            }
+        }
+
+        window.toggleOSMRoads = toggleOSMRoads;
+        window.toggleOSMBuildings = toggleOSMBuildings;
+
+        // ============================================
+        // SELECT CITY AND FETCH FLOOD ANALYSIS
+        // ============================================
+        async function selectCity(city) {
+            currentCity = city;
+            
+            // Update UI
+            document.querySelectorAll('.city-btn').forEach(btn => btn.classList.remove('active'));
+            if (event?.target) {
+                event.target.closest('.city-btn')?.classList.add('active');
+            }
+            
+            document.getElementById('infoPanel').innerHTML = `<div class="info-panel"><div class="loading">🔄 Analyzing ${city.name}...</div></div>`;
+            map.setView([city.lat, city.lon], 11);
+
+            // Reset OSM layers when switching cities
+            if (roadsVisible) {
+                if (currentRoadsLayer) map.removeLayer(currentRoadsLayer);
+                roadsVisible = false;
+                document.getElementById('btnRoads').classList.remove('active-layer');
+            }
+            if (buildingsVisible) {
+                if (currentBuildingsLayer) map.removeLayer(currentBuildingsLayer);
+                buildingsVisible = false;
+                document.getElementById('btnBuildings').classList.remove('active-layer');
+            }
+
+            try {
+                const response = await fetch(`/api/analyze/${city.name}`);
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error);
+                
+                // Setup all map layers
+                if (data.maps.true_color) {
+                    currentLayers.truecolor = L.tileLayer(
+                        `https://earthengine.googleapis.com/map/${data.maps.true_color.mapid}/{z}/{x}/{y}?token=${data.maps.true_color.token}`,
+                        { attribution: 'Sentinel-2 True Color' }
+                    );
+                }
+                if (data.maps.ndwi_water) {
+                    currentLayers.water = L.tileLayer(
+                        `https://earthengine.googleapis.com/map/${data.maps.ndwi_water.mapid}/{z}/{x}/{y}?token=${data.maps.ndwi_water.token}`,
+                        { opacity: 0.85, attribution: 'NDWI - Water Bodies (BLUE)' }
+                    );
+                }
+                if (data.maps.sar_before) {
+                    currentLayers.before = L.tileLayer(
+                        `https://earthengine.googleapis.com/map/${data.maps.sar_before.mapid}/{z}/{x}/{y}?token=${data.maps.sar_before.token}`,
+                        { attribution: 'SAR - 90 days ago (Normal)' }
+                    );
+                }
+                if (data.maps.sar_current) {
+                    currentLayers.current = L.tileLayer(
+                        `https://earthengine.googleapis.com/map/${data.maps.sar_current.mapid}/{z}/{x}/{y}?token=${data.maps.sar_current.token}`,
+                        { attribution: 'SAR - Current (Last 15 days)' }
+                    );
+                }
+                if (data.maps.flood_extent) {
+                    currentLayers.flood = L.tileLayer(
+                        `https://earthengine.googleapis.com/map/${data.maps.flood_extent.mapid}/{z}/{x}/{y}?token=${data.maps.flood_extent.token}`,
+                        { opacity: 0.75, attribution: 'Flood Extent (RED = Flooded)' }
+                    );
+                }
+                
+                // Show flood layer by default
+                setActiveLayer('flood');
+                displayAnalysis(data);
+                
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('infoPanel').innerHTML = `<div class="info-panel"><p style="color:#e94560;">❌ Error: ${error.message}</p></div>`;
+            }
+        }
+
+        function displayAnalysis(data) {
+            const riskClass = `risk-${data.risk_level.toLowerCase()}`;
+            const impact = data.impact_assessment;
+            const forecast = data.rainfall_forecast_mm;
+            const coastalInfo = data.coastal ? `<div class="impact-card">🌊 <strong>Coastal City</strong><br>Cyclone/Storm Surge Risk: ${data.coastal_risk}</div>` : '';
+            
+            let floodProneHtml = '';
+            if (data.flood_prone_areas && data.flood_prone_areas.length > 0) {
+                floodProneHtml = '<div class="section-title">⚠️ Flood-Prone Areas</div><div>';
+                data.flood_prone_areas.forEach(area => {
+                    floodProneHtml += `<span class="forecast-item">📍 ${area.name}</span> `;
+                });
+                floodProneHtml += '</div>';
+            }
+            
+            document.getElementById('infoPanel').innerHTML = `
+                <div class="info-panel">
+                    <h2>${data.city}, ${data.state} ${data.coastal ? '🏖️' : '🏙️'}</h2>
+                    <div style="text-align:center; margin:10px 0;">
+                        <span class="risk-tag ${riskClass}">${data.risk_level} RISK</span>
+                    </div>
+                    
+                    <div class="stat-grid">
+                        <div class="stat-card"><div class="stat-value">${data.flooded_area_hectares.toLocaleString()}</div><div>hectares flooded</div></div>
+                        <div class="stat-card"><div class="stat-value">${impact.flood_percentage}%</div><div>of city area</div></div>
+                    </div>
+                    
+                    ${coastalInfo}
+                    
+                    <div class="section-title">👥 Population Impact</div>
+                    <div class="impact-card">📊 <strong>${impact.affected_population_estimate.toLocaleString()}</strong> people affected</div>
+                    <div class="impact-card">⚠️ Severity: <strong>${impact.severity_level}</strong></div>
+                    
+                    <div class="section-title">🏥 Critical Infrastructure at Risk</div>
+                    <div class="stat-grid">
+                        <div class="stat-card"><div class="stat-value">${impact.hospitals_in_flood_zone}</div><div>Hospitals</div></div>
+                        <div class="stat-card"><div class="stat-value">${impact.schools_in_flood_zone}</div><div>Schools</div></div>
+                    </div>
+                    
+                    <div class="section-title">🌧️ 3-Day Rainfall Forecast</div>
+                    <div style="text-align:center">
+                        <span class="forecast-item">Day 1: ${forecast.day1} mm</span>
+                        <span class="forecast-item">Day 2: ${forecast.day2} mm</span>
+                        <span class="forecast-item">Day 3: ${forecast.day3} mm</span>
+                        <div class="stat-card" style="margin-top:8px;"><strong>Total: ${forecast.total_forecast} mm</strong></div>
+                    </div>
+                    
+                    <div class="section-title">🔍 Flood Causes</div>
+                    <div class="impact-card">⚠️ ${data.flood_causes}</div>
+                    
+                    ${floodProneHtml}
+                    
+                    <div class="section-title">🛰️ Satellite Layers Available</div>
+                    <div style="font-size:0.7rem; color:#888;">
+                        • 💧 <strong>Water Bodies</strong> - BLUE shows rivers, lakes, flooded areas<br>
+                        • 🔴 <strong>Flood Extent</strong> - RED shows active flooding<br>
+                        • 📡 <strong>SAR Before/After</strong> - Compare normal vs current conditions<br>
+                        • 🛣️ <strong>OSM Roads</strong> - Yellow evacuation routes<br>
+                        • 🏠 <strong>OSM Buildings</strong> - Orange infrastructure at risk
+                    </div>
+                    
+                    <div class="stat-card" style="margin-top: 10px;">
+                        <div style="font-size: 0.7rem; color: #888;">
+                            Analysis Date: ${data.analysis_date}<br>
+                            Resolution: 10m/pixel | Data: Sentinel-1 SAR + Sentinel-2 + OpenStreetMap
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // INITIALIZE
+        // ============================================
+        loadCities();
+    </script>
+</body>
+</html>
