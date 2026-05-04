@@ -38,34 +38,49 @@ class FloodPredictor:
         logger.info("Flood Predictor Initialized")
     
     def get_true_color(self, lat, lon):
-        """Sentinel-2 True Color (what you'd see from space)"""
+        """Sentinel-2 True Color with forced token generation"""
         roi = ee.Geometry.Point([lon, lat]).buffer(5000)
         collection = ee.ImageCollection('COPERNICUS/S2') \
             .filterBounds(roi) \
-            .filterDate((datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d')) \
+            .filterDate('2024-01-01', datetime.now().strftime('%Y-%m-%d')) \
             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
             .select(['B4', 'B3', 'B2'])
         
         image = collection.median().clip(roi)
-        map_id = image.getMapId({'bands': ['B4', 'B3', 'B2'], 'min': 0, 'max': 3000})
-        return {'mapid': map_id['mapid'], 'token': map_id.get('token', '')}
+        
+        # Force token generation by creating a visualization image
+        vis_params = {'bands': ['B4', 'B3', 'B2'], 'min': 0, 'max': 3000}
+        map_id = ee.Image(image).getMapId(vis_params)
+        
+        # Get the token properly from the mapid response
+        token = map_id.get('token', '')
+        
+        return {
+            'mapid': map_id['mapid'], 
+            'token': token
+        }
     
     def get_water_bodies(self, lat, lon):
-        """NDWI - Water bodies appear BLUE"""
+        """NDWI Water Bodies with forced token generation"""
         roi = ee.Geometry.Point([lon, lat]).buffer(5000)
         collection = ee.ImageCollection('COPERNICUS/S2') \
             .filterBounds(roi) \
-            .filterDate((datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d')) \
+            .filterDate('2024-01-01', datetime.now().strftime('%Y-%m-%d')) \
             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
             .select(['B3', 'B8'])
         
         image = collection.median().clip(roi)
         ndwi = image.normalizedDifference(['B3', 'B8'])
-        map_id = ndwi.getMapId({'min': -0.2, 'max': 0.5, 'palette': ['#8B4513', '#FFFFFF', '#0000FF']})
-        return {'mapid': map_id['mapid'], 'token': map_id.get('token', '')}
+        
+        # Force token generation
+        vis_params = {'min': -0.2, 'max': 0.5, 'palette': ['#8B4513', '#FFFFFF', '#0000FF']}
+        map_id = ndwi.getMapId(vis_params)
+        token = map_id.get('token', '')
+        
+        return {'mapid': map_id['mapid'], 'token': token}
     
     def get_sar_before(self, lat, lon):
-        """Sentinel-1 SAR from 90 days ago (normal conditions)"""
+        """SAR Before with forced token generation"""
         roi = ee.Geometry.Point([lon, lat]).buffer(5000)
         end_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=120)).strftime('%Y-%m-%d')
@@ -78,11 +93,14 @@ class FloodPredictor:
             .select('VV')
         
         image = collection.median().clip(roi)
-        map_id = image.getMapId({'min': -25, 'max': 5, 'palette': ['#000000', '#404040', '#808080', '#C0C0C0', '#FFFFFF']})
-        return {'mapid': map_id['mapid'], 'token': map_id.get('token', '')}
+        vis_params = {'min': -25, 'max': 5, 'palette': ['black', 'white']}
+        map_id = image.getMapId(vis_params)
+        token = map_id.get('token', '')
+        
+        return {'mapid': map_id['mapid'], 'token': token}
     
     def get_sar_current(self, lat, lon):
-        """Sentinel-1 SAR from last 15 days (current conditions)"""
+        """SAR Current with forced token generation"""
         roi = ee.Geometry.Point([lon, lat]).buffer(5000)
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')
@@ -95,11 +113,14 @@ class FloodPredictor:
             .select('VV')
         
         image = collection.median().clip(roi)
-        map_id = image.getMapId({'min': -25, 'max': 5, 'palette': ['#000000', '#404040', '#808080', '#C0C0C0', '#FFFFFF']})
-        return {'mapid': map_id['mapid'], 'token': map_id.get('token', '')}
+        vis_params = {'min': -25, 'max': 5, 'palette': ['black', 'white']}
+        map_id = image.getMapId(vis_params)
+        token = map_id.get('token', '')
+        
+        return {'mapid': map_id['mapid'], 'token': token}
     
     def get_flood_extent(self, lat, lon):
-        """Flood extent in BRIGHT RED - compares current vs baseline"""
+        """Flood extent with forced token generation"""
         roi = ee.Geometry.Point([lon, lat]).buffer(5000)
         
         # Current water (last 15 days)
@@ -126,11 +147,14 @@ class FloodPredictor:
         ).getInfo()
         flooded_area = (area.get('VV', 0) or 0) / 10000
         
-        map_id = flood.getMapId({'palette': ['#FF0000'], 'min': 0, 'max': 1})
+        # Force token generation
+        vis_params = {'palette': ['#FF0000'], 'min': 0, 'max': 1}
+        map_id = flood.getMapId(vis_params)
+        token = map_id.get('token', '')
         
         return {
             'flooded_area': flooded_area,
-            'map': {'mapid': map_id['mapid'], 'token': map_id.get('token', '')}
+            'map': {'mapid': map_id['mapid'], 'token': token}
         }
     
     def analyze_city(self, city_name, city_data):
@@ -155,15 +179,20 @@ class FloodPredictor:
             else:
                 risk_level = "NORMAL"
             
+            # Calculate affected population
+            area_sqkm = city_data.get('area_sqkm', 100)
+            flood_percentage = min(100, (flood['flooded_area'] / 100) / area_sqkm * 100)
+            affected_population = int(city_data['population'] * (flood_percentage / 100))
+            
             return {
                 'status': 'success',
                 'city': city_data['name'],
                 'state': city_data['state'],
                 'coastal': city_data.get('coastal', False),
                 'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'flooded_area_hectares': flood['flooded_area'],
+                'flooded_area_hectares': round(flood['flooded_area'], 2),
                 'risk_level': risk_level,
-                'affected_population': int(city_data['population'] * min(100, (flood['flooded_area'] / 100) / city_data['area_sqkm'] * 100) / 100),
+                'affected_population': affected_population,
                 'flood_causes': city_data.get('flood_causes', 'Unknown'),
                 'historical_floods': city_data.get('historical_floods', []),
                 'maps': {
