@@ -95,9 +95,9 @@
     <script>
         var map = L.map('map').setView([23.5, 85.0], 5);
         
-        // Use Esri satellite basemap (always works)
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri'
+        // Use a reliable base map
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> contributors'
         }).addTo(map);
 
         let cities = [];
@@ -112,7 +112,7 @@
                 displayCityList();
                 addMarkers();
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Error loading cities:', error);
                 document.getElementById('cityList').innerHTML = '<div class="loading">❌ Error loading cities</div>';
             }
         }
@@ -132,7 +132,7 @@
         function addMarkers() {
             cities.forEach(city => {
                 const marker = L.marker([city.lat, city.lon]).addTo(map);
-                marker.bindPopup(`<b>${city.name}</b><br>${city.state}<br><button onclick="selectCityByName('${city.name}')" style="background:#e94560; border:none; padding:5px 10px; border-radius:5px; color:white; cursor:pointer;">Analyze</button>`);
+                marker.bindPopup(`<b>${city.name}</b><br>${city.state}<br><button onclick="selectCityByName('${city.name}')">Analyze</button>`);
             });
         }
 
@@ -156,18 +156,23 @@
             if (layerType === 'truecolor' && currentLayers.truecolor) {
                 currentLayers.truecolor.addTo(map);
                 document.getElementById('btnTrueColor').classList.add('active-layer');
+                console.log("✅ True Color layer activated");
             } else if (layerType === 'water' && currentLayers.water) {
                 currentLayers.water.addTo(map);
                 document.getElementById('btnWater').classList.add('active-layer');
+                console.log("✅ Water Bodies layer activated");
             } else if (layerType === 'before' && currentLayers.before) {
                 currentLayers.before.addTo(map);
                 document.getElementById('btnBefore').classList.add('active-layer');
+                console.log("✅ SAR Before layer activated");
             } else if (layerType === 'current' && currentLayers.current) {
                 currentLayers.current.addTo(map);
                 document.getElementById('btnCurrent').classList.add('active-layer');
+                console.log("✅ SAR Current layer activated");
             } else if (layerType === 'flood' && currentLayers.flood) {
                 currentLayers.flood.addTo(map);
                 document.getElementById('btnFlood').classList.add('active-layer');
+                console.log("✅ Flood Extent layer activated");
             }
         }
 
@@ -190,24 +195,30 @@
                 
                 if (data.error) throw new Error(data.error);
                 
-                // Create layers using tile_url (NEW FORMAT - NO TOKEN NEEDED)
-                if (data.maps.true_color && data.maps.true_color.tile_url) {
-                    currentLayers.truecolor = L.tileLayer(data.maps.true_color.tile_url);
+                // NEW: Build the correct Earth Engine tile URL using the v1alpha format
+                if (data.maps.flood_extent && data.maps.flood_extent.mapid) {
+                    const tileUrl = `https://earthengine.googleapis.com/v1alpha/${data.maps.flood_extent.mapid}/tiles/{z}/{x}/{y}`;
+                    currentLayers.flood = L.tileLayer(tileUrl, { opacity: 0.8 });
+                    console.log("Flood layer created with URL:", tileUrl);
                 }
-                if (data.maps.water_bodies && data.maps.water_bodies.tile_url) {
-                    currentLayers.water = L.tileLayer(data.maps.water_bodies.tile_url, { opacity: 0.7 });
+                if (data.maps.true_color && data.maps.true_color.mapid) {
+                    const tileUrl = `https://earthengine.googleapis.com/v1alpha/${data.maps.true_color.mapid}/tiles/{z}/{x}/{y}`;
+                    currentLayers.truecolor = L.tileLayer(tileUrl);
                 }
-                if (data.maps.sar_before && data.maps.sar_before.tile_url) {
-                    currentLayers.before = L.tileLayer(data.maps.sar_before.tile_url);
+                if (data.maps.water_bodies && data.maps.water_bodies.mapid) {
+                    const tileUrl = `https://earthengine.googleapis.com/v1alpha/${data.maps.water_bodies.mapid}/tiles/{z}/{x}/{y}`;
+                    currentLayers.water = L.tileLayer(tileUrl, { opacity: 0.7 });
                 }
-                if (data.maps.sar_current && data.maps.sar_current.tile_url) {
-                    currentLayers.current = L.tileLayer(data.maps.sar_current.tile_url);
+                if (data.maps.sar_before && data.maps.sar_before.mapid) {
+                    const tileUrl = `https://earthengine.googleapis.com/v1alpha/${data.maps.sar_before.mapid}/tiles/{z}/{x}/{y}`;
+                    currentLayers.before = L.tileLayer(tileUrl);
                 }
-                if (data.maps.flood_extent && data.maps.flood_extent.tile_url) {
-                    currentLayers.flood = L.tileLayer(data.maps.flood_extent.tile_url, { opacity: 0.8 });
+                if (data.maps.sar_current && data.maps.sar_current.mapid) {
+                    const tileUrl = `https://earthengine.googleapis.com/v1alpha/${data.maps.sar_current.mapid}/tiles/{z}/{x}/{y}`;
+                    currentLayers.current = L.tileLayer(tileUrl);
                 }
                 
-                // Show flood layer by default
+                // Activate the flood layer by default after selection
                 if (currentLayers.flood) {
                     setActiveLayer('flood');
                 }
@@ -215,7 +226,7 @@
                 displayAnalysis(data);
                 
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Error analyzing city:', error);
                 document.getElementById('infoPanel').innerHTML = `<div class="info-panel"><p style="color:#e94560;">❌ Error: ${error.message}</p></div>`;
             }
         }
@@ -247,7 +258,7 @@
                     
                     <div class="stat-grid">
                         <div class="stat-card"><div class="stat-value">${floodedArea}</div><div>hectares flooded</div></div>
-                        <div class="stat-card"><div class="stat-value">${((data.flooded_area_hectares / 100) / 100 * 100).toFixed(1) || 0}%</div><div>of city area</div></div>
+                        <div class="stat-card"><div class="stat-value">${((data.flooded_area_hectares / 100) / 100 * 100).toFixed(1)}%</div><div>of city area</div></div>
                     </div>
                     
                     <div class="section-title">👥 Population Impact</div>
