@@ -43,7 +43,7 @@
         .map-controls button:hover { background: #e94560; }
         .map-controls .active-layer { background: #e94560; border: 1px solid white; }
         .loading { text-align: center; padding: 20px; color: #e94560; }
-        .legend { position: absolute; bottom: 20px; left: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; font-size: 0.7rem; line-height: 1.4; }
+        .legend { position: absolute; bottom: 20px; left: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; font-size: 0.7rem; }
         .legend-color { display: inline-block; width: 20px; height: 10px; margin-right: 5px; }
     </style>
 </head>
@@ -78,7 +78,7 @@
             <div id="map"></div>
             <div class="legend">
                 <strong>Legend</strong><br>
-                <span class="legend-color" style="background:#0000FF;"></span> Water Bodies (NDWI)<br>
+                <span class="legend-color" style="background:#0000FF;"></span> Water Bodies<br>
                 <span class="legend-color" style="background:#FF0000;"></span> Flood Extent<br>
                 <span class="legend-color" style="background:#808080;"></span> SAR Radar
             </div>
@@ -93,19 +93,16 @@
     </div>
 
     <script>
-        // Initialize map with satellite basemap
         var map = L.map('map').setView([23.5, 85.0], 5);
         
         // Use Esri satellite basemap (always works)
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-            maxZoom: 18
+            attribution: 'Tiles &copy; Esri'
         }).addTo(map);
 
         let cities = [];
         let currentCity = null;
         let currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
-        let currentFloodCircle = null;
 
         async function loadCities() {
             try {
@@ -135,7 +132,7 @@
         function addMarkers() {
             cities.forEach(city => {
                 const marker = L.marker([city.lat, city.lon]).addTo(map);
-                marker.bindPopup(`<b>${city.name}</b><br>${city.state}<br><button onclick="selectCityByName('${city.name}')" style="background:#e94560; border:none; padding:5px 10px; border-radius:5px; color:white; cursor:pointer;">Analyze Flood Risk</button>`);
+                marker.bindPopup(`<b>${city.name}</b><br>${city.state}<br><button onclick="selectCityByName('${city.name}')" style="background:#e94560; border:none; padding:5px 10px; border-radius:5px; color:white; cursor:pointer;">Analyze</button>`);
             });
         }
 
@@ -159,41 +156,25 @@
             if (layerType === 'truecolor' && currentLayers.truecolor) {
                 currentLayers.truecolor.addTo(map);
                 document.getElementById('btnTrueColor').classList.add('active-layer');
-                console.log("✅ True Color layer activated");
             } else if (layerType === 'water' && currentLayers.water) {
                 currentLayers.water.addTo(map);
                 document.getElementById('btnWater').classList.add('active-layer');
-                console.log("✅ Water Bodies layer activated");
             } else if (layerType === 'before' && currentLayers.before) {
                 currentLayers.before.addTo(map);
                 document.getElementById('btnBefore').classList.add('active-layer');
-                console.log("✅ SAR Before layer activated");
             } else if (layerType === 'current' && currentLayers.current) {
                 currentLayers.current.addTo(map);
                 document.getElementById('btnCurrent').classList.add('active-layer');
-                console.log("✅ SAR Current layer activated");
             } else if (layerType === 'flood' && currentLayers.flood) {
                 currentLayers.flood.addTo(map);
                 document.getElementById('btnFlood').classList.add('active-layer');
-                console.log("✅ Flood Extent layer activated");
             }
         }
 
         window.setActiveLayer = setActiveLayer;
 
-        function calculateFloodRadius(floodedAreaHectares) {
-            const areaSqMeters = floodedAreaHectares * 10000;
-            let radius = Math.sqrt(areaSqMeters / Math.PI);
-            return Math.min(radius, 15000);
-        }
-
         async function selectCity(city) {
             currentCity = city;
-            
-            // Remove existing flood circle
-            if (currentFloodCircle) {
-                map.removeLayer(currentFloodCircle);
-            }
             
             document.querySelectorAll('.city-btn').forEach(btn => btn.classList.remove('active'));
             if (event?.target) {
@@ -209,64 +190,21 @@
                 
                 if (data.error) throw new Error(data.error);
                 
-                // Setup all map layers using the new tile_url format
-                if (data.maps) {
-                    if (data.maps.true_color && data.maps.true_color.tile_url) {
-                        currentLayers.truecolor = L.tileLayer(data.maps.true_color.tile_url, {
-                            attribution: 'Sentinel-2 True Color'
-                        });
-                        console.log("✅ True Color layer created");
-                    }
-                    if (data.maps.water_bodies && data.maps.water_bodies.tile_url) {
-                        currentLayers.water = L.tileLayer(data.maps.water_bodies.tile_url, {
-                            opacity: 0.7,
-                            attribution: 'Water Bodies (BLUE)'
-                        });
-                        console.log("✅ Water Bodies layer created");
-                    }
-                    if (data.maps.sar_before && data.maps.sar_before.tile_url) {
-                        currentLayers.before = L.tileLayer(data.maps.sar_before.tile_url, {
-                            attribution: 'SAR - 90 days ago'
-                        });
-                        console.log("✅ SAR Before layer created");
-                    }
-                    if (data.maps.sar_current && data.maps.sar_current.tile_url) {
-                        currentLayers.current = L.tileLayer(data.maps.sar_current.tile_url, {
-                            attribution: 'SAR - Current'
-                        });
-                        console.log("✅ SAR Current layer created");
-                    }
-                    if (data.maps.flood_extent && data.maps.flood_extent.tile_url) {
-                        currentLayers.flood = L.tileLayer(data.maps.flood_extent.tile_url, {
-                            opacity: 0.8,
-                            attribution: 'Flood Extent (RED)'
-                        });
-                        console.log("✅ Flood Extent layer created");
-                    }
+                // Create layers using tile_url (NEW FORMAT - NO TOKEN NEEDED)
+                if (data.maps.true_color && data.maps.true_color.tile_url) {
+                    currentLayers.truecolor = L.tileLayer(data.maps.true_color.tile_url);
                 }
-                
-                // Create flood extent circle on map as backup visualization
-                if (data.flooded_area_hectares > 0) {
-                    const radius = calculateFloodRadius(data.flooded_area_hectares);
-                    let floodColor = '#FF0000';
-                    if (data.risk_level === 'CRITICAL') floodColor = '#8B0000';
-                    else if (data.risk_level === 'HIGH') floodColor = '#FF0000';
-                    else if (data.risk_level === 'MEDIUM') floodColor = '#FFA500';
-                    else if (data.risk_level === 'LOW') floodColor = '#FFFF00';
-                    
-                    currentFloodCircle = L.circle([city.lat, city.lon], {
-                        color: floodColor,
-                        fillColor: floodColor,
-                        fillOpacity: 0.3,
-                        radius: radius,
-                        weight: 2,
-                        opacity: 0.7
-                    }).addTo(map).bindPopup(`
-                        <b>${data.city}</b><br>
-                        Flooded: ${data.flooded_area_hectares.toFixed(0)} hectares<br>
-                        Risk: ${data.risk_level}<br>
-                        Affected: ${data.affected_population?.toLocaleString() || 'N/A'} people
-                    `);
+                if (data.maps.water_bodies && data.maps.water_bodies.tile_url) {
+                    currentLayers.water = L.tileLayer(data.maps.water_bodies.tile_url, { opacity: 0.7 });
+                }
+                if (data.maps.sar_before && data.maps.sar_before.tile_url) {
+                    currentLayers.before = L.tileLayer(data.maps.sar_before.tile_url);
+                }
+                if (data.maps.sar_current && data.maps.sar_current.tile_url) {
+                    currentLayers.current = L.tileLayer(data.maps.sar_current.tile_url);
+                }
+                if (data.maps.flood_extent && data.maps.flood_extent.tile_url) {
+                    currentLayers.flood = L.tileLayer(data.maps.flood_extent.tile_url, { opacity: 0.8 });
                 }
                 
                 // Show flood layer by default
