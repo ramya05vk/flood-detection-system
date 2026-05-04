@@ -39,7 +39,7 @@
         .impact-card { background: #0f3460; padding: 10px; border-radius: 8px; margin: 8px 0; }
         .historical-item { background: #0f3460; padding: 8px; border-radius: 6px; margin-bottom: 8px; font-size: 0.75rem; }
         .historical-date { color: #e94560; font-weight: bold; }
-        .map-controls { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; display: flex; gap: 8px; flex-wrap: wrap; max-width: 350px; }
+        .map-controls { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; display: flex; gap: 8px; flex-wrap: wrap; max-width: 450px; }
         .map-controls button { background: #0f3460; border: none; padding: 6px 10px; border-radius: 5px; color: white; cursor: pointer; font-size: 0.7rem; transition: all 0.2s; }
         .map-controls button:hover { background: #e94560; }
         .map-controls .active-layer { background: #e94560; border: 1px solid white; }
@@ -67,9 +67,10 @@
                 <div class="info-panel">
                     <p>Select a city to view flood analysis.</p>
                     <p style="font-size:0.7rem; margin-top:10px;">📊 <strong>Available Layers:</strong><br>
-                    • 🖼️ True Color (Sentinel-2)<br>
+                    • 🖼️ True Color (Sentinel-2 Optical)<br>
                     • 💧 Water Bodies (BLUE = water)<br>
-                    • 📡 SAR Current (Radar)<br>
+                    • 📡 SAR Before (90 days ago - normal)<br>
+                    • 📡 SAR Current (last 15 days)<br>
                     • 🔴 Flood Extent (RED = flooded areas)</p>
                 </div>
             </div>
@@ -85,14 +86,16 @@
                 <span class="legend-color" style="background:#000000;"></span> Water (SAR)
             </div>
             <div class="map-controls">
-                <button id="btnFlood" onclick="setActiveLayer('flood')">🔴 Flood Extent</button>
+                <button id="btnTrueColor" onclick="setActiveLayer('truecolor')">🖼️ True Color</button>
                 <button id="btnWater" onclick="setActiveLayer('water')">💧 Water Bodies</button>
+                <button id="btnBefore" onclick="setActiveLayer('before')">📡 SAR Before</button>
+                <button id="btnCurrent" onclick="setActiveLayer('current')">📡 SAR Current</button>
+                <button id="btnFlood" onclick="setActiveLayer('flood')">🔴 Flood Extent</button>
             </div>
         </div>
     </div>
 
     <script>
-        // Initialize map
         var map = L.map('map').setView([23.5, 85.0], 5);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OSM contributors'
@@ -100,10 +103,8 @@
 
         let cities = [];
         let currentCity = null;
-        let currentLayers = { flood: null, water: null };
-        let currentActiveLayer = null;
+        let currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
 
-        // Load cities from API
         async function loadCities() {
             try {
                 const response = await fetch('/api/cities');
@@ -132,7 +133,7 @@
         function addMarkers() {
             cities.forEach(city => {
                 const marker = L.marker([city.lat, city.lon]).addTo(map);
-                marker.bindPopup(`<b>${city.name}</b><br>${city.state}<br><button onclick="selectCityByName('${city.name}')" style="background:#e94560; border:none; padding:5px 10px; border-radius:5px; color:white; cursor:pointer;">Analyze Flood Risk</button>`);
+                marker.bindPopup(`<b>${city.name}</b><br>${city.state}<br><button onclick="selectCityByName('${city.name}')" style="background:#e94560; border:none; padding:5px 10px; border-radius:5px; color:white; cursor:pointer;">Analyze</button>`);
             });
         }
 
@@ -142,22 +143,32 @@
         };
 
         function clearAllLayers() {
-            if (currentLayers.flood) map.removeLayer(currentLayers.flood);
+            if (currentLayers.truecolor) map.removeLayer(currentLayers.truecolor);
             if (currentLayers.water) map.removeLayer(currentLayers.water);
+            if (currentLayers.before) map.removeLayer(currentLayers.before);
+            if (currentLayers.current) map.removeLayer(currentLayers.current);
+            if (currentLayers.flood) map.removeLayer(currentLayers.flood);
         }
 
         function setActiveLayer(layerType) {
             clearAllLayers();
             document.querySelectorAll('.map-controls button').forEach(btn => btn.classList.remove('active-layer'));
             
-            if (layerType === 'flood' && currentLayers.flood) {
-                currentLayers.flood.addTo(map);
-                document.getElementById('btnFlood').classList.add('active-layer');
-                currentActiveLayer = 'flood';
+            if (layerType === 'truecolor' && currentLayers.truecolor) {
+                currentLayers.truecolor.addTo(map);
+                document.getElementById('btnTrueColor').classList.add('active-layer');
             } else if (layerType === 'water' && currentLayers.water) {
                 currentLayers.water.addTo(map);
                 document.getElementById('btnWater').classList.add('active-layer');
-                currentActiveLayer = 'water';
+            } else if (layerType === 'before' && currentLayers.before) {
+                currentLayers.before.addTo(map);
+                document.getElementById('btnBefore').classList.add('active-layer');
+            } else if (layerType === 'current' && currentLayers.current) {
+                currentLayers.current.addTo(map);
+                document.getElementById('btnCurrent').classList.add('active-layer');
+            } else if (layerType === 'flood' && currentLayers.flood) {
+                currentLayers.flood.addTo(map);
+                document.getElementById('btnFlood').classList.add('active-layer');
             }
         }
 
@@ -180,19 +191,42 @@
                 
                 if (data.error) throw new Error(data.error);
                 
-                // Setup flood map layer
-                if (data.maps && data.maps.flood_map && data.maps.flood_map.mapid) {
-                    currentLayers.flood = L.tileLayer(
-                        `https://earthengine.googleapis.com/map/${data.maps.flood_map.mapid}/{z}/{x}/{y}?token=${data.maps.flood_map.token}`,
-                        { opacity: 0.7, attribution: 'Flood Extent (RED)' }
-                    );
+                // Setup all map layers
+                if (data.maps) {
+                    if (data.maps.true_color && data.maps.true_color.mapid) {
+                        currentLayers.truecolor = L.tileLayer(
+                            `https://earthengine.googleapis.com/map/${data.maps.true_color.mapid}/{z}/{x}/{y}?token=${data.maps.true_color.token}`,
+                            { attribution: 'Sentinel-2 True Color' }
+                        );
+                    }
+                    if (data.maps.water_bodies && data.maps.water_bodies.mapid) {
+                        currentLayers.water = L.tileLayer(
+                            `https://earthengine.googleapis.com/map/${data.maps.water_bodies.mapid}/{z}/{x}/{y}?token=${data.maps.water_bodies.token}`,
+                            { opacity: 0.7, attribution: 'Water Bodies (BLUE)' }
+                        );
+                    }
+                    if (data.maps.sar_before && data.maps.sar_before.mapid) {
+                        currentLayers.before = L.tileLayer(
+                            `https://earthengine.googleapis.com/map/${data.maps.sar_before.mapid}/{z}/{x}/{y}?token=${data.maps.sar_before.token}`,
+                            { attribution: 'SAR - 90 days ago' }
+                        );
+                    }
+                    if (data.maps.sar_current && data.maps.sar_current.mapid) {
+                        currentLayers.current = L.tileLayer(
+                            `https://earthengine.googleapis.com/map/${data.maps.sar_current.mapid}/{z}/{x}/{y}?token=${data.maps.sar_current.token}`,
+                            { attribution: 'SAR - Current' }
+                        );
+                    }
+                    if (data.maps.flood_extent && data.maps.flood_extent.mapid) {
+                        currentLayers.flood = L.tileLayer(
+                            `https://earthengine.googleapis.com/map/${data.maps.flood_extent.mapid}/{z}/{x}/{y}?token=${data.maps.flood_extent.token}`,
+                            { opacity: 0.7, attribution: 'Flood Extent (RED)' }
+                        );
+                    }
                 }
                 
-                // Display flood layer by default
-                if (currentLayers.flood) {
-                    setActiveLayer('flood');
-                }
-                
+                // Show flood layer by default
+                setActiveLayer('flood');
                 displayAnalysis(data);
                 
             } catch (error) {
@@ -228,7 +262,7 @@
                     
                     <div class="stat-grid">
                         <div class="stat-card"><div class="stat-value">${floodedArea}</div><div>hectares flooded</div></div>
-                        <div class="stat-card"><div class="stat-value">${data.flood_percentage || 0}%</div><div>of city area</div></div>
+                        <div class="stat-card"><div class="stat-value">${((data.flooded_area_hectares / 100) / 100 * 100).toFixed(1) || 0}%</div><div>of city area</div></div>
                     </div>
                     
                     <div class="section-title">👥 Population Impact</div>
@@ -239,17 +273,24 @@
                     
                     ${historicalHtml}
                     
-                    <div class="section-title">📡 Data Sources</div>
+                    <div class="section-title">📡 Satellite Layers Available</div>
                     <div style="font-size:0.7rem; color:#888;">
-                        • Sentinel-1 SAR (Flood detection)<br>
-                        • Real-time satellite analysis<br>
-                        • Analysis Date: ${data.analysis_date}
+                        • 🖼️ True Color: Natural satellite view<br>
+                        • 💧 Water Bodies: BLUE shows rivers, lakes<br>
+                        • 🔴 Flood Extent: RED shows active flooding<br>
+                        • 📡 SAR Before/After: Compare normal vs current
+                    </div>
+                    
+                    <div class="stat-card" style="margin-top: 10px;">
+                        <div style="font-size: 0.7rem; color: #888;">
+                            Analysis Date: ${data.analysis_date}<br>
+                            Data: Sentinel-1 SAR + Sentinel-2
+                        </div>
                     </div>
                 </div>
             `;
         }
 
-        // Initialize
         loadCities();
     </script>
 </body>
