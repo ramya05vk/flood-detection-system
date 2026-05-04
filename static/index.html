@@ -96,6 +96,7 @@
     </div>
 
     <script>
+        // Initialize map
         var map = L.map('map').setView([23.5, 85.0], 5);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OSM contributors'
@@ -105,6 +106,7 @@
         let currentCity = null;
         let currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
 
+        // Load cities from API
         async function loadCities() {
             try {
                 const response = await fetch('/api/cities');
@@ -157,18 +159,25 @@
             if (layerType === 'truecolor' && currentLayers.truecolor) {
                 currentLayers.truecolor.addTo(map);
                 document.getElementById('btnTrueColor').classList.add('active-layer');
+                console.log("✅ True Color layer activated");
             } else if (layerType === 'water' && currentLayers.water) {
                 currentLayers.water.addTo(map);
                 document.getElementById('btnWater').classList.add('active-layer');
+                console.log("✅ Water Bodies layer activated");
             } else if (layerType === 'before' && currentLayers.before) {
                 currentLayers.before.addTo(map);
                 document.getElementById('btnBefore').classList.add('active-layer');
+                console.log("✅ SAR Before layer activated");
             } else if (layerType === 'current' && currentLayers.current) {
                 currentLayers.current.addTo(map);
                 document.getElementById('btnCurrent').classList.add('active-layer');
+                console.log("✅ SAR Current layer activated");
             } else if (layerType === 'flood' && currentLayers.flood) {
                 currentLayers.flood.addTo(map);
                 document.getElementById('btnFlood').classList.add('active-layer');
+                console.log("✅ Flood Extent layer activated");
+            } else {
+                console.log("Layer not available:", layerType);
             }
         }
 
@@ -186,10 +195,42 @@
             map.setView([city.lat, city.lon], 10);
 
             try {
+                console.log(`Fetching analysis for ${city.name}...`);
                 const response = await fetch(`/api/analyze/${city.name.toLowerCase()}`);
                 const data = await response.json();
                 
                 if (data.error) throw new Error(data.error);
+                
+                // ============================================
+                // DEBUGGING CODE - Check what data we received
+                // ============================================
+                console.log("=== DEBUG: Full API Response ===");
+                console.log("City:", data.city);
+                console.log("Risk Level:", data.risk_level);
+                console.log("Flooded Area:", data.flooded_area_hectares, "hectares");
+                console.log("Maps object:", data.maps);
+                
+                if (data.maps) {
+                    console.log("True Color:", data.maps.true_color ? "✅ Present" : "❌ Missing");
+                    console.log("Water Bodies:", data.maps.water_bodies ? "✅ Present" : "❌ Missing");
+                    console.log("SAR Before:", data.maps.sar_before ? "✅ Present" : "❌ Missing");
+                    console.log("SAR Current:", data.maps.sar_current ? "✅ Present" : "❌ Missing");
+                    console.log("Flood Extent:", data.maps.flood_extent ? "✅ Present" : "❌ Missing");
+                    
+                    if (data.maps.flood_extent) {
+                        console.log("Flood Extent Map ID:", data.maps.flood_extent.mapid);
+                        console.log("Flood Extent Token:", data.maps.flood_extent.token);
+                        
+                        // Test if tile loads
+                        var testImg = new Image();
+                        testImg.src = `https://earthengine.googleapis.com/map/${data.maps.flood_extent.mapid}/12/2047/1366?token=${data.maps.flood_extent.token}`;
+                        testImg.onload = () => console.log("✅ FLOOD TILE LOADS SUCCESSFULLY!");
+                        testImg.onerror = (err) => console.log("❌ FLOOD TILE FAILS TO LOAD", err);
+                    }
+                } else {
+                    console.log("❌ No maps data received from backend!");
+                }
+                console.log("=================================");
                 
                 // Setup all map layers
                 if (data.maps) {
@@ -198,35 +239,46 @@
                             `https://earthengine.googleapis.com/map/${data.maps.true_color.mapid}/{z}/{x}/{y}?token=${data.maps.true_color.token}`,
                             { attribution: 'Sentinel-2 True Color' }
                         );
+                        console.log("✅ True Color layer created");
                     }
                     if (data.maps.water_bodies && data.maps.water_bodies.mapid) {
                         currentLayers.water = L.tileLayer(
                             `https://earthengine.googleapis.com/map/${data.maps.water_bodies.mapid}/{z}/{x}/{y}?token=${data.maps.water_bodies.token}`,
                             { opacity: 0.7, attribution: 'Water Bodies (BLUE)' }
                         );
+                        console.log("✅ Water Bodies layer created");
                     }
                     if (data.maps.sar_before && data.maps.sar_before.mapid) {
                         currentLayers.before = L.tileLayer(
                             `https://earthengine.googleapis.com/map/${data.maps.sar_before.mapid}/{z}/{x}/{y}?token=${data.maps.sar_before.token}`,
                             { attribution: 'SAR - 90 days ago' }
                         );
+                        console.log("✅ SAR Before layer created");
                     }
                     if (data.maps.sar_current && data.maps.sar_current.mapid) {
                         currentLayers.current = L.tileLayer(
                             `https://earthengine.googleapis.com/map/${data.maps.sar_current.mapid}/{z}/{x}/{y}?token=${data.maps.sar_current.token}`,
                             { attribution: 'SAR - Current' }
                         );
+                        console.log("✅ SAR Current layer created");
                     }
                     if (data.maps.flood_extent && data.maps.flood_extent.mapid) {
                         currentLayers.flood = L.tileLayer(
                             `https://earthengine.googleapis.com/map/${data.maps.flood_extent.mapid}/{z}/{x}/{y}?token=${data.maps.flood_extent.token}`,
-                            { opacity: 0.7, attribution: 'Flood Extent (RED)' }
+                            { opacity: 0.8, attribution: 'Flood Extent (RED)' }
                         );
+                        console.log("✅ Flood Extent layer created");
                     }
                 }
                 
                 // Show flood layer by default
-                setActiveLayer('flood');
+                if (currentLayers.flood) {
+                    setActiveLayer('flood');
+                    console.log("🎯 Flood layer set as default");
+                } else {
+                    console.log("⚠️ No flood layer available to display");
+                }
+                
                 displayAnalysis(data);
                 
             } catch (error) {
@@ -291,6 +343,7 @@
             `;
         }
 
+        // Initialize
         loadCities();
     </script>
 </body>
