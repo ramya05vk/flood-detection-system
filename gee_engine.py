@@ -38,14 +38,7 @@ class FloodPredictor:
         logger.info("Flood Predictor with ML Initialized")
     
     # ============================================
-    # CRITICAL: TILE URL FUNCTION - MAKES MAP LAYERS WORK
-    # ============================================
-    def get_tile_url(self, mapid):
-        """Generate the correct tile URL using v1alpha format (NO token needed)"""
-        return f"https://earthengine.googleapis.com/v1alpha/projects/{PROJECT_ID}/maps/{mapid}/tiles/{{z}}/{{x}}/{{y}}"
-    
-    # ============================================
-    # SATELLITE IMAGERY FUNCTIONS
+    # MAP FUNCTIONS - USING tile_fetcher.url_format (CORRECT WAY)
     # ============================================
     
     def get_true_color(self, lat, lon):
@@ -60,9 +53,12 @@ class FloodPredictor:
         vis_params = {'bands': ['B4', 'B3', 'B2'], 'min': 0, 'max': 3000}
         map_id_dict = image.getMapId(vis_params)
         
+        # CRITICAL: Use tile_fetcher.url_format to get the correct tile URL
+        tile_url = map_id_dict['tile_fetcher'].url_format
+        
         return {
             'mapid': map_id_dict['mapid'],
-            'tile_url': self.get_tile_url(map_id_dict['mapid'])
+            'tile_url': tile_url
         }
     
     def get_water_bodies(self, lat, lon):
@@ -80,9 +76,12 @@ class FloodPredictor:
         vis_params = {'min': 0, 'max': 1, 'palette': ['#0000FF', '#1E90FF', '#00BFFF']}
         map_id_dict = water.getMapId(vis_params)
         
+        # CRITICAL: Use tile_fetcher.url_format to get the correct tile URL
+        tile_url = map_id_dict['tile_fetcher'].url_format
+        
         return {
             'mapid': map_id_dict['mapid'],
-            'tile_url': self.get_tile_url(map_id_dict['mapid'])
+            'tile_url': tile_url
         }
     
     def get_sar_before(self, lat, lon):
@@ -101,9 +100,12 @@ class FloodPredictor:
         vis_params = {'min': -25, 'max': 5, 'palette': ['black', 'white']}
         map_id_dict = image.getMapId(vis_params)
         
+        # CRITICAL: Use tile_fetcher.url_format to get the correct tile URL
+        tile_url = map_id_dict['tile_fetcher'].url_format
+        
         return {
             'mapid': map_id_dict['mapid'],
-            'tile_url': self.get_tile_url(map_id_dict['mapid'])
+            'tile_url': tile_url
         }
     
     def get_sar_current(self, lat, lon):
@@ -122,9 +124,12 @@ class FloodPredictor:
         vis_params = {'min': -25, 'max': 5, 'palette': ['black', 'white']}
         map_id_dict = image.getMapId(vis_params)
         
+        # CRITICAL: Use tile_fetcher.url_format to get the correct tile URL
+        tile_url = map_id_dict['tile_fetcher'].url_format
+        
         return {
             'mapid': map_id_dict['mapid'],
-            'tile_url': self.get_tile_url(map_id_dict['mapid'])
+            'tile_url': tile_url
         }
     
     def get_flood_extent(self, lat, lon):
@@ -154,11 +159,14 @@ class FloodPredictor:
         vis_params = {'palette': ['#FF0000'], 'min': 0, 'max': 1}
         map_id_dict = flood.getMapId(vis_params)
         
+        # CRITICAL: Use tile_fetcher.url_format to get the correct tile URL
+        tile_url = map_id_dict['tile_fetcher'].url_format
+        
         return {
             'flooded_area': flooded_area,
             'map': {
                 'mapid': map_id_dict['mapid'],
-                'tile_url': self.get_tile_url(map_id_dict['mapid'])
+                'tile_url': tile_url
             }
         }
     

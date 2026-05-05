@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FloodWatch India - AI-Powered Flood Monitoring</title>
+    <title>FloodWatch India - Real-time Flood Monitoring</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
@@ -14,24 +14,24 @@
         .header h1 span { color: #e94560; }
         .badge { background: #e94560; padding: 5px 10px; border-radius: 20px; font-size: 0.7rem; margin-left: 10px; }
         .container { display: flex; height: calc(100vh - 70px); }
-        .sidebar { width: 480px; background: #16213e; padding: 20px; overflow-y: auto; border-right: 1px solid #0f3460; }
+        .sidebar { width: 450px; background: #16213e; padding: 20px; overflow-y: auto; border-right: 1px solid #0f3460; }
         .map-container { flex: 1; position: relative; }
         #map { height: 100%; width: 100%; }
         .section-title { color: #e94560; margin: 15px 0 10px 0; font-size: 0.9rem; border-left: 3px solid #e94560; padding-left: 10px; }
-        .city-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-height: 250px; overflow-y: auto; }
+        .city-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-height: 280px; overflow-y: auto; }
         .city-btn { background: #0f3460; border: none; padding: 10px 15px; border-radius: 8px; color: white; cursor: pointer; text-align: left; transition: all 0.3s; width: 100%; }
         .city-btn:hover, .city-btn.active { background: #e94560; transform: translateX(5px); }
         .coastal-city { border-left: 3px solid #1e88e5; }
         .city-name { font-weight: bold; font-size: 1rem; }
         .city-state { font-size: 0.7rem; opacity: 0.7; }
         .coastal-tag { font-size: 0.6rem; background: #1e88e5; padding: 2px 6px; border-radius: 10px; margin-left: 8px; }
-        .info-panel { background: #0f0f1a; border-radius: 12px; padding: 15px; margin-top: 15px; max-height: calc(100vh - 200px); overflow-y: auto; }
+        .info-panel { background: #0f0f1a; border-radius: 12px; padding: 15px; margin-top: 15px; max-height: 60vh; overflow-y: auto; }
         .risk-tag { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
-        .risk-critical { background: #8b0000; }
-        .risk-high { background: #e94560; }
+        .risk-critical { background: #8b0000; color: white; }
+        .risk-high { background: #e94560; color: white; }
         .risk-medium { background: #ffa500; color: #1a1a2e; }
         .risk-low { background: #ffd700; color: #1a1a2e; }
-        .risk-normal { background: #2e8b57; }
+        .risk-normal { background: #2e8b57; color: white; }
         .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 10px 0; }
         .stat-card { background: #0f3460; padding: 10px; border-radius: 8px; text-align: center; }
         .stat-value { font-size: 1.3rem; font-weight: bold; color: #e94560; }
@@ -40,7 +40,7 @@
         .historical-item { background: #0f3460; padding: 8px; border-radius: 6px; margin-bottom: 8px; font-size: 0.75rem; }
         .historical-date { color: #e94560; font-weight: bold; }
         .map-controls { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 400px; }
-        .map-controls button { background: #0f3460; border: none; padding: 5px 8px; border-radius: 5px; color: white; cursor: pointer; font-size: 0.6rem; transition: all 0.2s; }
+        .map-controls button { background: #0f3460; border: none; padding: 6px 10px; border-radius: 5px; color: white; cursor: pointer; font-size: 0.65rem; transition: all 0.2s; }
         .map-controls button:hover { background: #e94560; }
         .map-controls .active-layer { background: #e94560; border: 1px solid white; }
         .loading { text-align: center; padding: 20px; color: #e94560; }
@@ -48,7 +48,6 @@
         .legend-color { display: inline-block; width: 20px; height: 10px; margin-right: 5px; }
         .progress-bar { background: #1a1a3e; height: 6px; border-radius: 3px; margin-top: 3px; }
         .progress-fill { background: #e94560; height: 6px; border-radius: 3px; }
-        .vulnerability-card { background: #0f3460; border-radius: 8px; padding: 10px; margin-top: 10px; }
         .ml-card { background: #1a1a3e; border-radius: 8px; padding: 10px; margin-top: 10px; border-left: 3px solid #e94560; }
     </style>
 </head>
@@ -71,12 +70,12 @@
             <div id="infoPanel">
                 <div class="info-panel">
                     <p>Select a city to view flood analysis.</p>
-                    <p style="font-size:0.7rem; margin-top:10px;">📊 <strong>Features:</strong><br>
-                    • 🔴 Active flood detection<br>
-                    • 💧 Water body identification<br>
-                    • 🤖 Random Forest ML prediction<br>
-                    • 📊 Vulnerability scoring (0-100)<br>
-                    • 💡 Smart recommendations</p>
+                    <p style="font-size:0.7rem; margin-top:10px;">📊 <strong>Layers:</strong><br>
+                    • 🔴 FLOOD EXTENT - Actively flooded areas<br>
+                    • 💧 WATER BODIES - Permanent water (BLUE)<br>
+                    • 📡 SAR CURRENT - Current radar image<br>
+                    • 📡 SAR BEFORE - Normal conditions (90 days ago)<br>
+                    • 🖼️ TRUE COLOR - Satellite photo</p>
                 </div>
             </div>
         </div>
@@ -89,24 +88,28 @@
                 <span class="legend-color" style="background:#808080;"></span> 📡 SAR Radar
             </div>
             <div class="map-controls">
-                <button id="btnFlood" onclick="setActiveLayer('flood')">🔴 FLOOD</button>
-                <button id="btnWater" onclick="setActiveLayer('water')">💧 WATER</button>
-                <button id="btnCurrent" onclick="setActiveLayer('current')">📡 SAR NOW</button>
+                <button id="btnFlood" onclick="setActiveLayer('flood')">🔴 FLOOD EXTENT</button>
+                <button id="btnWater" onclick="setActiveLayer('water')">💧 WATER BODIES</button>
+                <button id="btnCurrent" onclick="setActiveLayer('current')">📡 SAR CURRENT</button>
                 <button id="btnBefore" onclick="setActiveLayer('before')">📡 SAR BEFORE</button>
                 <button id="btnTrue" onclick="setActiveLayer('truecolor')">🖼️ TRUE COLOR</button>
+                <button id="btnML" onclick="showMLResults()">🤖 ML RISK</button>
             </div>
         </div>
     </div>
 
     <script>
+        // Initialize map
         var map = L.map('map').setView([23.5, 85.0], 5);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OSM contributors'
         }).addTo(map);
 
         let cities = [];
+        let currentCity = null;
         let currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
 
+        // Load cities from API
         async function loadCities() {
             try {
                 const response = await fetch('/api/cities');
@@ -115,6 +118,7 @@
                 displayCityList();
                 addMarkers();
             } catch (error) {
+                console.error('Error:', error);
                 document.getElementById('cityList').innerHTML = '<div class="loading">❌ Error loading cities</div>';
             }
         }
@@ -158,30 +162,86 @@
             if (layerType === 'flood' && currentLayers.flood) {
                 currentLayers.flood.addTo(map);
                 document.getElementById('btnFlood').classList.add('active-layer');
+                console.log("✅ FLOOD EXTENT layer activated");
             } else if (layerType === 'water' && currentLayers.water) {
                 currentLayers.water.addTo(map);
                 document.getElementById('btnWater').classList.add('active-layer');
+                console.log("✅ WATER BODIES layer activated");
             } else if (layerType === 'current' && currentLayers.current) {
                 currentLayers.current.addTo(map);
                 document.getElementById('btnCurrent').classList.add('active-layer');
+                console.log("✅ SAR CURRENT layer activated");
             } else if (layerType === 'before' && currentLayers.before) {
                 currentLayers.before.addTo(map);
                 document.getElementById('btnBefore').classList.add('active-layer');
+                console.log("✅ SAR BEFORE layer activated");
             } else if (layerType === 'truecolor' && currentLayers.truecolor) {
                 currentLayers.truecolor.addTo(map);
                 document.getElementById('btnTrue').classList.add('active-layer');
+                console.log("✅ TRUE COLOR layer activated");
             }
         }
 
         window.setActiveLayer = setActiveLayer;
 
+        async function showMLResults() {
+            if (!currentCity) {
+                alert('Please select a city first');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/ml-results/${currentCity.name.toLowerCase()}`);
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error);
+                
+                const riskClass = `risk-${data.risk_level.toLowerCase()}`;
+                
+                let mlPanel = document.getElementById('mlPanel');
+                if (!mlPanel) {
+                    mlPanel = document.createElement('div');
+                    mlPanel.id = 'mlPanel';
+                    mlPanel.style.cssText = 'position: fixed; bottom: 100px; right: 20px; background: #0f0f1a; padding: 15px; border-radius: 8px; max-width: 300px; z-index: 1000; border-left: 3px solid #e94560;';
+                    document.body.appendChild(mlPanel);
+                }
+                
+                mlPanel.innerHTML = `
+                    <h4>🤖 Random Forest ML Analysis</h4>
+                    <div style="margin: 10px 0;">
+                        <span class="risk-tag ${riskClass}">${data.risk_level} RISK</span>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.flooded_area_hectares.toFixed(0)}</div>
+                        <div class="stat-label">hectares (ML detected)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">ML Model Accuracy</div>
+                        <div class="stat-value">${data.ml_accuracy_percent || (data.ml_accuracy * 100).toFixed(1) + '%'}</div>
+                    </div>
+                    <div style="font-size: 0.7rem; color: #888; margin-top: 10px;">
+                        📡 Sentinel-1 SAR<br>
+                        🌲 Random Forest (100 trees)<br>
+                        🎯 Features: VV, VH, Elevation, Slope
+                    </div>
+                    <button onclick="document.getElementById('mlPanel').remove()" style="margin-top: 10px; background: #333; border: none; padding: 5px 10px; border-radius: 5px; color: white; cursor: pointer;">Close</button>
+                `;
+            } catch (error) {
+                alert('ML results not available: ' + error.message);
+            }
+        }
+
+        window.showMLResults = showMLResults;
+
         async function selectCity(city) {
+            currentCity = city;
+            
             document.querySelectorAll('.city-btn').forEach(btn => btn.classList.remove('active'));
             if (event?.target) {
                 event.target.closest('.city-btn')?.classList.add('active');
             }
             
-            document.getElementById('infoPanel').innerHTML = `<div class="info-panel"><div class="loading">🔄 Analyzing ${city.name} with Random Forest ML...</div></div>`;
+            document.getElementById('infoPanel').innerHTML = `<div class="info-panel"><div class="loading">🔄 Analyzing ${city.name}...</div></div>`;
             map.setView([city.lat, city.lon], 10);
 
             try {
@@ -190,99 +250,68 @@
                 
                 if (data.error) throw new Error(data.error);
                 
-                if (data.maps.flood_extent && data.maps.flood_extent.tile_url) {
-                    currentLayers.flood = L.tileLayer(data.maps.flood_extent.tile_url, { opacity: 0.85 });
-                }
-                if (data.maps.water_bodies && data.maps.water_bodies.tile_url) {
-                    currentLayers.water = L.tileLayer(data.maps.water_bodies.tile_url, { opacity: 0.7 });
-                }
-                if (data.maps.sar_current && data.maps.sar_current.tile_url) {
-                    currentLayers.current = L.tileLayer(data.maps.sar_current.tile_url);
-                }
-                if (data.maps.sar_before && data.maps.sar_before.tile_url) {
-                    currentLayers.before = L.tileLayer(data.maps.sar_before.tile_url);
-                }
-                if (data.maps.true_color && data.maps.true_color.tile_url) {
-                    currentLayers.truecolor = L.tileLayer(data.maps.true_color.tile_url);
+                console.log("API Response received:", data);
+                console.log("Maps object:", data.maps);
+                
+                // Create layers using tile_url (NOT token)
+                if (data.maps && data.maps.flood_extent && data.maps.flood_extent.tile_url) {
+                    currentLayers.flood = L.tileLayer(data.maps.flood_extent.tile_url, { 
+                        opacity: 0.8,
+                        attribution: 'Flood Extent'
+                    });
+                    console.log("✅ Flood layer created with URL:", data.maps.flood_extent.tile_url);
+                } else {
+                    console.log("❌ Flood extent tile_url not found");
                 }
                 
-                if (currentLayers.flood) setActiveLayer('flood');
+                if (data.maps && data.maps.water_bodies && data.maps.water_bodies.tile_url) {
+                    currentLayers.water = L.tileLayer(data.maps.water_bodies.tile_url, { 
+                        opacity: 0.7,
+                        attribution: 'Water Bodies'
+                    });
+                    console.log("✅ Water bodies layer created");
+                }
+                
+                if (data.maps && data.maps.sar_current && data.maps.sar_current.tile_url) {
+                    currentLayers.current = L.tileLayer(data.maps.sar_current.tile_url, {
+                        attribution: 'SAR Current'
+                    });
+                    console.log("✅ SAR Current layer created");
+                }
+                
+                if (data.maps && data.maps.sar_before && data.maps.sar_before.tile_url) {
+                    currentLayers.before = L.tileLayer(data.maps.sar_before.tile_url, {
+                        attribution: 'SAR Before'
+                    });
+                    console.log("✅ SAR Before layer created");
+                }
+                
+                if (data.maps && data.maps.true_color && data.maps.true_color.tile_url) {
+                    currentLayers.truecolor = L.tileLayer(data.maps.true_color.tile_url, {
+                        attribution: 'True Color'
+                    });
+                    console.log("✅ True Color layer created");
+                }
+                
+                // Activate flood layer by default
+                if (currentLayers.flood) {
+                    setActiveLayer('flood');
+                } else {
+                    console.log("⚠️ No flood layer available");
+                }
+                
                 displayAnalysis(data);
                 
             } catch (error) {
+                console.error('Error:', error);
                 document.getElementById('infoPanel').innerHTML = `<div class="info-panel"><p style="color:#e94560;">❌ Error: ${error.message}</p></div>`;
             }
         }
 
         function displayAnalysis(data) {
             const riskClass = `risk-${data.risk_level.toLowerCase()}`;
+            const floodedArea = data.flooded_area_hectares.toLocaleString();
             const vuln = data.vulnerability_assessment;
-            const ml = data.ml_prediction;
-            
-            let mlHtml = '';
-            if (ml) {
-                const mlRiskClass = ml.ml_risk_level === 'VERY HIGH' ? 'risk-critical' :
-                                   ml.ml_risk_level === 'HIGH' ? 'risk-high' :
-                                   ml.ml_risk_level === 'MEDIUM' ? 'risk-medium' : 'risk-normal';
-                
-                mlHtml = `
-                    <div class="section-title">🤖 Random Forest ML Prediction</div>
-                    <div class="ml-card">
-                        <div style="text-align:center;">
-                            <div style="font-size:1.8rem; font-weight:bold; color:#e94560;">${ml.ml_risk_score}</div>
-                            <div style="font-size:0.7rem;">ML Risk Score (0-100)</div>
-                            <div style="margin-top:5px;"><span class="risk-tag ${mlRiskClass}">${ml.ml_risk_level} ML RISK</span></div>
-                            <div style="font-size:0.6rem; margin-top:3px;">Confidence: ${ml.ml_confidence}</div>
-                        </div>
-                        <div style="margin-top:10px;">
-                            <strong>📊 ML Model Inputs:</strong>
-                            <div style="font-size:0.7rem; margin-top:5px;">
-                                📍 Elevation: ${ml.ml_features.elevation_m} m<br>
-                                📐 Slope: ${ml.ml_features.slope_deg}°<br>
-                                💧 Water Index (NDWI): ${ml.ml_features.ndwi}<br>
-                                🌿 Vegetation (NDVI): ${ml.ml_features.ndvi}
-                            </div>
-                            <div style="margin-top:8px;">
-                                <strong>🧠 ML Explanation:</strong>
-                                ${ml.explanation.map(e => `<div style="font-size:0.7rem; margin-top:3px;">⚠️ ${e}</div>`).join('')}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-            
-            let vulnHtml = '';
-            if (vuln) {
-                const vulnClass = vuln.vulnerability_level === 'VERY HIGH' ? 'risk-critical' :
-                                 vuln.vulnerability_level === 'HIGH' ? 'risk-high' :
-                                 vuln.vulnerability_level === 'MODERATE' ? 'risk-medium' : 'risk-normal';
-                
-                vulnHtml = `
-                    <div class="section-title">📊 Vulnerability Assessment</div>
-                    <div class="vulnerability-card">
-                        <div style="text-align:center;">
-                            <div style="font-size:1.5rem; font-weight:bold; color:#e94560;">${vuln.total_score}</div>
-                            <div style="font-size:0.7rem;">Vulnerability Score (0-100)</div>
-                            <div style="margin-top:5px;"><span class="risk-tag ${vulnClass}">${vuln.vulnerability_level} VULNERABILITY</span></div>
-                        </div>
-                        <div style="margin-top:10px;">
-                            ${vuln.factors.map(f => `
-                                <div style="margin:8px 0;">
-                                    <div style="font-size:0.75rem; text-transform:capitalize;">
-                                        ${f.factor === 'elevation' ? '🏔️ Elevation' : f.factor === 'slope' ? '📐 Slope' : f.factor === 'drainage' ? '🚰 Drainage' : '📜 History'}
-                                        <span style="float:right;">${f.score}%</span>
-                                    </div>
-                                    <div class="progress-bar"><div class="progress-fill" style="width:${f.score}%;"></div></div>
-                                </div>
-                            `).join('')}
-                        </div>
-                        <div style="margin-top:10px;">
-                            <strong>💡 Recommendations:</strong>
-                            ${vuln.recommendations.map(rec => `<div style="font-size:0.7rem; margin-top:5px;">${rec}</div>`).join('')}
-                        </div>
-                    </div>
-                `;
-            }
             
             let historicalHtml = '';
             if (data.historical_floods && data.historical_floods.length > 0) {
@@ -298,6 +327,26 @@
                 });
             }
             
+            let vulnHtml = '';
+            if (vuln) {
+                const vulnClass = vuln.vulnerability_level === 'VERY HIGH' ? 'risk-critical' :
+                                 vuln.vulnerability_level === 'HIGH' ? 'risk-high' :
+                                 vuln.vulnerability_level === 'MODERATE' ? 'risk-medium' : 'risk-normal';
+                
+                vulnHtml = `
+                    <div class="section-title">📊 Vulnerability Score</div>
+                    <div class="stat-card">
+                        <div class="stat-value">${vuln.total_score}</div>
+                        <div class="stat-label">out of 100</div>
+                        <div style="margin-top:5px;"><span class="risk-tag ${vulnClass}">${vuln.vulnerability_level}</span></div>
+                    </div>
+                    <div class="section-title">💡 Recommendations</div>
+                    <div class="stat-card">
+                        ${vuln.recommendations.map(rec => `<div style="margin:5px 0; font-size:0.75rem;">${rec}</div>`).join('')}
+                    </div>
+                `;
+            }
+            
             document.getElementById('infoPanel').innerHTML = `
                 <div class="info-panel">
                     <h2>${data.city}, ${data.state} ${data.coastal ? '🏖️' : '🏙️'}</h2>
@@ -305,7 +354,7 @@
                         <span class="risk-tag ${riskClass}">${data.risk_level} RISK</span>
                     </div>
                     
-                    <div class="flood-area">${data.flooded_area_hectares.toLocaleString()}</div>
+                    <div class="flood-area">${floodedArea}</div>
                     <div style="text-align: center; font-size: 0.8rem;">hectares currently flooded</div>
                     
                     <div class="stat-grid">
@@ -320,13 +369,20 @@
                     </div>
                     
                     <div class="section-title">🔍 Flood Causes</div>
-                    <div class="stat-card" style="margin-top: 5px;">
+                    <div class="stat-card">
                         <div style="font-size: 0.85rem;">${data.flood_causes}</div>
                     </div>
                     
-                    ${mlHtml}
                     ${vulnHtml}
                     ${historicalHtml}
+                    
+                    <div class="stat-card" style="margin-top: 10px;">
+                        <div style="font-size: 0.7rem; color: #888;">
+                            Analysis Date: ${data.analysis_date}<br>
+                            Data: Sentinel-1 SAR + Sentinel-2<br>
+                            Click layer buttons on map to view satellite images
+                        </div>
+                    </div>
                 </div>
             `;
         }
