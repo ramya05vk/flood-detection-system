@@ -1,0 +1,5 @@
+city,flooded_area_hectares,risk_level,ml_accuracy 
+chennai,283.45,HIGH,0.87 
+mumbai,156.23,HIGH,0.84 
+kolkata,98.76,MEDIUM,0.86 
+darbhanga,1725.93,CRITICAL,0.88 

@@ -1,11 +1,16 @@
 # app.py
 import os
+import csv
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
+from datetime import datetime
 
 app = Flask(__name__, static_folder='static', static_url_path='')
 CORS(app)
 
+# ============================================
+# CITY DATABASE
+# ============================================
 CITIES = {
     'chennai': {
         'name': 'Chennai', 'state': 'Tamil Nadu', 'lat': 13.08, 'lon': 80.27,
@@ -57,6 +62,33 @@ CITIES = {
     }
 }
 
+# ============================================
+# LOAD ML RESULTS FROM CSV
+# ============================================
+ML_RESULTS = {}
+csv_path = os.path.join(os.path.dirname(__file__), 'ml_results.csv')
+
+if os.path.exists(csv_path):
+    try:
+        with open(csv_path, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                city_name = row.get('city', '').lower().strip()
+                if city_name:
+                    ML_RESULTS[city_name] = {
+                        'flooded_area_hectares': float(row.get('flooded_area_hectares', 0)),
+                        'risk_level': row.get('risk_level', 'NORMAL'),
+                        'ml_accuracy': float(row.get('ml_accuracy', 0))
+                    }
+        print(f"✅ Loaded ML results for {len(ML_RESULTS)} cities")
+    except Exception as e:
+        print(f"⚠️ Error loading ML results: {e}")
+else:
+    print(f"⚠️ ML results file not found at: {csv_path}")
+
+# ============================================
+# GEE ENGINE IMPORT
+# ============================================
 try:
     from gee_engine import FloodPredictor, INIT_SUCCESS
     predictor = FloodPredictor() if INIT_SUCCESS else None
@@ -64,6 +96,10 @@ except Exception as e:
     print(f"Import error: {e}")
     predictor = None
     INIT_SUCCESS = False
+
+# ============================================
+# ROUTES
+# ============================================
 
 @app.route('/')
 def home():
@@ -73,9 +109,11 @@ def home():
 def health():
     return jsonify({
         'status': 'healthy',
+        'timestamp': datetime.now().isoformat(),
         'ee_initialized': INIT_SUCCESS,
         'predictor_ready': predictor is not None,
-        'cities_count': len(CITIES)
+        'cities_count': len(CITIES),
+        'ml_results_loaded': len(ML_RESULTS)
     })
 
 @app.route('/api/cities')
@@ -84,6 +122,7 @@ def get_cities():
 
 @app.route('/api/analyze/<city_name>')
 def analyze(city_name):
+    """Real-time flood detection using GEE threshold method"""
     city_name = city_name.lower()
     if city_name not in CITIES:
         return jsonify({'error': 'City not found'}), 404
@@ -94,6 +133,73 @@ def analyze(city_name):
     result = predictor.analyze_city(city_name, CITIES[city_name])
     return jsonify(result)
 
+# ============================================
+# ML ENDPOINT (NEW)
+# ============================================
+
+@app.route('/api/ml-results/<city_name>', methods=['GET'])
+def get_ml_results(city_name):
+    """Get ML-based flood detection results from Random Forest model"""
+    city_name = city_name.lower()
+    
+    if city_name not in CITIES:
+        return jsonify({'error': 'City not found'}), 404
+    
+    if city_name not in ML_RESULTS:
+        return jsonify({
+            'error': 'ML results not available for this city',
+            'message': 'Run GEE Random Forest script to generate ML predictions'
+        }), 404
+    
+    city_data = CITIES[city_name]
+    ml_data = ML_RESULTS[city_name]
+    
+    return jsonify({
+        'status': 'success',
+        'city': city_data['name'],
+        'state': city_data['state'],
+        'coastal': city_data.get('coastal', False),
+        'flooded_area_hectares': ml_data['flooded_area_hectares'],
+        'risk_level': ml_data['risk_level'],
+        'ml_accuracy': ml_data['ml_accuracy'],
+        'ml_accuracy_percent': f"{ml_data['ml_accuracy'] * 100:.1f}%",
+        'model_type': 'Random Forest',
+        'features_used': ['Sentinel-1 VV', 'Sentinel-1 VH', 'Elevation', 'Slope'],
+        'message': 'Random Forest ML prediction from Sentinel-1 SAR satellite data',
+        'analysis_date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    })
+
+# ============================================
+# ADDITIONAL HELPER ENDPOINTS
+# ============================================
+
+@app.route('/api/ml-all', methods=['GET'])
+def get_all_ml_results():
+    """Get ML results for all cities"""
+    all_results = []
+    for city_name, ml_data in ML_RESULTS.items():
+        if city_name in CITIES:
+            all_results.append({
+                'city': CITIES[city_name]['name'],
+                'state': CITIES[city_name]['state'],
+                'flooded_area_hectares': ml_data['flooded_area_hectares'],
+                'risk_level': ml_data['risk_level'],
+                'ml_accuracy': ml_data['ml_accuracy']
+            })
+    
+    return jsonify({
+        'status': 'success',
+        'count': len(all_results),
+        'results': all_results
+    })
+
+# ============================================
+# MAIN
+# ============================================
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
+    print(f"🚀 Starting Flood Detection API on port {port}")
+    print(f"📊 ML Results loaded: {len(ML_RESULTS)} cities")
+    print(f"🗺️ GEE Initialized: {INIT_SUCCESS}")
     app.run(host='0.0.0.0', port=port)
