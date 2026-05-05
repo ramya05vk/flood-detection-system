@@ -37,9 +37,16 @@ class FloodPredictor:
     def __init__(self):
         logger.info("Flood Predictor with ML Initialized")
     
+    # ============================================
+    # CRITICAL: TILE URL FUNCTION - MAKES MAP LAYERS WORK
+    # ============================================
     def get_tile_url(self, mapid):
-        """Generate the correct tile URL without token"""
+        """Generate the correct tile URL using v1alpha format (NO token needed)"""
         return f"https://earthengine.googleapis.com/v1alpha/projects/{PROJECT_ID}/maps/{mapid}/tiles/{{z}}/{{x}}/{{y}}"
+    
+    # ============================================
+    # SATELLITE IMAGERY FUNCTIONS
+    # ============================================
     
     def get_true_color(self, lat, lon):
         roi = ee.Geometry.Point([lon, lat]).buffer(5000)
@@ -156,148 +163,8 @@ class FloodPredictor:
         }
     
     # ============================================
-    # ML FUNCTIONS (Random Forest)
+    # VULNERABILITY ASSESSMENT
     # ============================================
-    
-    def calculate_ndwi_for_ml(self, roi):
-        """Calculate NDWI for ML"""
-        try:
-            collection = ee.ImageCollection('COPERNICUS/S2') \
-                .filterBounds(roi) \
-                .filterDate((datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d'), 
-                           datetime.now().strftime('%Y-%m-%d')) \
-                .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30)) \
-                .select(['B3', 'B8'])
-            
-            image = collection.median().clip(roi)
-            ndwi = image.normalizedDifference(['B3', 'B8']).rename('ndwi')
-            return ndwi
-        except:
-            return ee.Image.constant(0).rename('ndwi')
-    
-    def calculate_ndvi_for_ml(self, roi):
-        """Calculate NDVI for ML"""
-        try:
-            collection = ee.ImageCollection('COPERNICUS/S2') \
-                .filterBounds(roi) \
-                .filterDate((datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d'), 
-                           datetime.now().strftime('%Y-%m-%d')) \
-                .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30)) \
-                .select(['B4', 'B8'])
-            
-            image = collection.median().clip(roi)
-            ndvi = image.normalizedDifference(['B8', 'B4']).rename('ndvi')
-            return ndvi
-        except:
-            return ee.Image.constant(0).rename('ndvi')
-    
-    def calculate_ml_risk_score(self, feature_stats, city_data):
-        """ML-based risk scoring using learned weights"""
-        score = 0
-        
-        elevation = feature_stats.get('elevation', 100)
-        if elevation < 10:
-            score += 30
-        elif elevation < 25:
-            score += 20
-        elif elevation < 50:
-            score += 10
-        
-        slope = feature_stats.get('slope', 5)
-        if slope < 1:
-            score += 25
-        elif slope < 2:
-            score += 15
-        elif slope < 3:
-            score += 5
-        
-        ndwi = feature_stats.get('ndwi', 0)
-        if ndwi > 0.3:
-            score += 25
-        elif ndwi > 0.1:
-            score += 15
-        elif ndwi > 0:
-            score += 5
-        
-        historical_count = len(city_data.get('historical_floods', []))
-        score += min(20, historical_count * 5)
-        
-        drainage = city_data.get('drainage_score', 5)
-        if drainage <= 2:
-            score += 20
-        elif drainage <= 4:
-            score += 10
-        
-        return min(100, score)
-    
-    def get_ml_explanation(self, risk_score, feature_stats, city_data):
-        """Generate explanation of ML prediction"""
-        explanations = []
-        
-        elevation = feature_stats.get('elevation', 100)
-        if elevation < 10:
-            explanations.append(f"Very low elevation ({elevation}m) makes this area highly susceptible to flooding")
-        elif elevation < 25:
-            explanations.append(f"Low elevation ({elevation}m) increases flood risk")
-        
-        slope = feature_stats.get('slope', 5)
-        if slope < 1:
-            explanations.append(f"Very flat terrain ({slope}°) → poor natural drainage")
-        
-        ndwi = feature_stats.get('ndwi', 0)
-        if ndwi > 0.2:
-            explanations.append(f"High water index ({ndwi:.2f}) indicates proximity to water bodies")
-        
-        if len(explanations) == 0:
-            explanations.append("ML analysis indicates moderate flood risk based on terrain and historical patterns")
-        
-        return explanations
-    
-    def predict_flood_risk_ml(self, lat, lon, city_data):
-        """Use Random Forest ML to predict flood risk"""
-        roi = ee.Geometry.Point([lon, lat]).buffer(5000)
-        
-        dem = ee.Image('USGS/SRTMGL1_003').clip(roi).select('elevation')
-        slope = ee.Terrain.slope(dem).rename('slope')
-        ndwi = self.calculate_ndwi_for_ml(roi)
-        ndvi = self.calculate_ndvi_for_ml(roi)
-        
-        features = dem.addBands(slope).addBands(ndwi).addBands(ndvi)
-        
-        feature_stats = features.reduceRegion(
-            reducer=ee.Reducer.mean(),
-            geometry=roi,
-            scale=100,
-            maxPixels=1e9
-        ).getInfo()
-        
-        risk_score = self.calculate_ml_risk_score(feature_stats, city_data)
-        
-        if risk_score >= 70:
-            ml_risk = "VERY HIGH"
-            ml_confidence = "HIGH"
-        elif risk_score >= 50:
-            ml_risk = "HIGH"
-            ml_confidence = "MEDIUM"
-        elif risk_score >= 25:
-            ml_risk = "MEDIUM"
-            ml_confidence = "LOW"
-        else:
-            ml_risk = "LOW"
-            ml_confidence = "HIGH"
-        
-        return {
-            'ml_risk_score': round(risk_score, 1),
-            'ml_risk_level': ml_risk,
-            'ml_confidence': ml_confidence,
-            'ml_features': {
-                'elevation_m': round(feature_stats.get('elevation', 0), 1),
-                'slope_deg': round(feature_stats.get('slope', 0), 1),
-                'ndwi': round(feature_stats.get('ndwi', 0), 3),
-                'ndvi': round(feature_stats.get('ndvi', 0), 3)
-            },
-            'explanation': self.get_ml_explanation(risk_score, feature_stats, city_data)
-        }
     
     def calculate_vulnerability_score(self, city_data):
         """Calculate flood vulnerability score (0-100)"""
@@ -390,6 +257,150 @@ class FloodPredictor:
             recommendations.append("✅ Regular monitoring sufficient. City has good natural flood protection.")
         
         return recommendations[:4]
+    
+    # ============================================
+    # ML PREDICTION FUNCTIONS
+    # ============================================
+    
+    def calculate_ndwi_for_ml(self, roi):
+        try:
+            collection = ee.ImageCollection('COPERNICUS/S2') \
+                .filterBounds(roi) \
+                .filterDate((datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d'), 
+                           datetime.now().strftime('%Y-%m-%d')) \
+                .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30)) \
+                .select(['B3', 'B8'])
+            
+            image = collection.median().clip(roi)
+            ndwi = image.normalizedDifference(['B3', 'B8']).rename('ndwi')
+            return ndwi
+        except:
+            return ee.Image.constant(0).rename('ndwi')
+    
+    def calculate_ndvi_for_ml(self, roi):
+        try:
+            collection = ee.ImageCollection('COPERNICUS/S2') \
+                .filterBounds(roi) \
+                .filterDate((datetime.now() - timedelta(days=60)).strftime('%Y-%m-%d'), 
+                           datetime.now().strftime('%Y-%m-%d')) \
+                .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 30)) \
+                .select(['B4', 'B8'])
+            
+            image = collection.median().clip(roi)
+            ndvi = image.normalizedDifference(['B8', 'B4']).rename('ndvi')
+            return ndvi
+        except:
+            return ee.Image.constant(0).rename('ndvi')
+    
+    def predict_flood_risk_ml(self, lat, lon, city_data):
+        """Use Random Forest ML to predict flood risk"""
+        roi = ee.Geometry.Point([lon, lat]).buffer(5000)
+        
+        dem = ee.Image('USGS/SRTMGL1_003').clip(roi).select('elevation')
+        slope = ee.Terrain.slope(dem).rename('slope')
+        ndwi = self.calculate_ndwi_for_ml(roi)
+        ndvi = self.calculate_ndvi_for_ml(roi)
+        
+        features = dem.addBands(slope).addBands(ndwi).addBands(ndvi)
+        
+        feature_stats = features.reduceRegion(
+            reducer=ee.Reducer.mean(),
+            geometry=roi,
+            scale=100,
+            maxPixels=1e9
+        ).getInfo()
+        
+        risk_score = self.calculate_ml_risk_score(feature_stats, city_data)
+        
+        if risk_score >= 70:
+            ml_risk = "VERY HIGH"
+            ml_confidence = "HIGH"
+        elif risk_score >= 50:
+            ml_risk = "HIGH"
+            ml_confidence = "MEDIUM"
+        elif risk_score >= 25:
+            ml_risk = "MEDIUM"
+            ml_confidence = "LOW"
+        else:
+            ml_risk = "LOW"
+            ml_confidence = "HIGH"
+        
+        return {
+            'ml_risk_score': round(risk_score, 1),
+            'ml_risk_level': ml_risk,
+            'ml_confidence': ml_confidence,
+            'ml_features': {
+                'elevation_m': round(feature_stats.get('elevation', 0), 1),
+                'slope_deg': round(feature_stats.get('slope', 0), 1),
+                'ndwi': round(feature_stats.get('ndwi', 0), 3),
+                'ndvi': round(feature_stats.get('ndvi', 0), 3)
+            },
+            'explanation': self.get_ml_explanation(risk_score, feature_stats, city_data)
+        }
+    
+    def calculate_ml_risk_score(self, feature_stats, city_data):
+        score = 0
+        
+        elevation = feature_stats.get('elevation', 100)
+        if elevation < 10:
+            score += 30
+        elif elevation < 25:
+            score += 20
+        elif elevation < 50:
+            score += 10
+        
+        slope = feature_stats.get('slope', 5)
+        if slope < 1:
+            score += 25
+        elif slope < 2:
+            score += 15
+        elif slope < 3:
+            score += 5
+        
+        ndwi = feature_stats.get('ndwi', 0)
+        if ndwi > 0.3:
+            score += 25
+        elif ndwi > 0.1:
+            score += 15
+        elif ndwi > 0:
+            score += 5
+        
+        historical_count = len(city_data.get('historical_floods', []))
+        score += min(20, historical_count * 5)
+        
+        drainage = city_data.get('drainage_score', 5)
+        if drainage <= 2:
+            score += 20
+        elif drainage <= 4:
+            score += 10
+        
+        return min(100, score)
+    
+    def get_ml_explanation(self, risk_score, feature_stats, city_data):
+        explanations = []
+        
+        elevation = feature_stats.get('elevation', 100)
+        if elevation < 10:
+            explanations.append(f"Very low elevation ({elevation}m) makes this area highly susceptible to flooding")
+        elif elevation < 25:
+            explanations.append(f"Low elevation ({elevation}m) increases flood risk")
+        
+        slope = feature_stats.get('slope', 5)
+        if slope < 1:
+            explanations.append(f"Very flat terrain ({slope}°) → poor natural drainage")
+        
+        ndwi = feature_stats.get('ndwi', 0)
+        if ndwi > 0.2:
+            explanations.append(f"High water index ({ndwi:.2f}) indicates proximity to water bodies")
+        
+        if len(explanations) == 0:
+            explanations.append("ML analysis indicates moderate flood risk based on terrain and historical patterns")
+        
+        return explanations
+    
+    # ============================================
+    # MAIN ANALYSIS FUNCTION
+    # ============================================
     
     def analyze_city(self, city_name, city_data):
         lat, lon = city_data['lat'], city_data['lon']
