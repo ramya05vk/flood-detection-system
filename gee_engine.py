@@ -59,6 +59,7 @@ class FloodPredictor:
         }
     
     def get_water_bodies(self, lat, lon):
+        """NDWI - Water bodies in BRIGHT BLUE - highly visible"""
         roi = ee.Geometry.Point([lon, lat]).buffer(5000)
         collection = ee.ImageCollection('COPERNICUS/S2') \
             .filterBounds(roi) \
@@ -68,8 +69,16 @@ class FloodPredictor:
         
         image = collection.median().clip(roi)
         ndwi = image.normalizedDifference(['B3', 'B8'])
-        vis_params = {'min': -0.2, 'max': 0.5, 'palette': ['#8B4513', '#FFFFFF', '#0000FF']}
-        map_id_dict = ndwi.getMapId(vis_params)
+        
+        # BRIGHT BLUE for high confidence water (NDWI > 0.3)
+        water = ndwi.gt(0.3).selfMask()
+        
+        vis_params = {
+            'min': 0, 
+            'max': 1, 
+            'palette': ['#0000FF', '#1E90FF', '#00BFFF']  # Bright blue shades
+        }
+        map_id_dict = water.getMapId(vis_params)
         
         return {
             'mapid': map_id_dict['mapid'],
@@ -119,30 +128,44 @@ class FloodPredictor:
         }
     
     def get_flood_extent(self, lat, lon):
+        """Flood extent in BRIGHT RED - ONLY new water (excludes permanent water bodies)"""
         roi = ee.Geometry.Point([lon, lat]).buffer(5000)
         
+        # Current water (last 15 days)
         current = ee.ImageCollection('COPERNICUS/S1_GRD') \
             .filterBounds(roi) \
             .filterDate((datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d')) \
             .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV')) \
             .select('VV').median()
         
+        # Baseline water (90 days ago - normal conditions)
         baseline = ee.ImageCollection('COPERNICUS/S1_GRD') \
             .filterBounds(roi) \
             .filterDate((datetime.now() - timedelta(days=105)).strftime('%Y-%m-%d'), (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')) \
             .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV')) \
             .select('VV').median()
         
+        # Water detection (dark areas where dB < -15)
         current_water = current.lt(-15)
         baseline_water = baseline.lt(-15)
+        
+        # NEW FLOOD = water now - water normally
+        # This eliminates permanent water bodies (sea, rivers, lakes)
         flood = current_water.updateMask(current_water.And(baseline_water.Not()))
         
+        # Calculate flooded area
         area = flood.multiply(ee.Image.pixelArea()).reduceRegion(
             reducer=ee.Reducer.sum(), geometry=roi, scale=30, maxPixels=1e9
         ).getInfo()
         flooded_area = (area.get('VV', 0) or 0) / 10000
         
-        vis_params = {'palette': ['#FF0000'], 'min': 0, 'max': 1}
+        # BRIGHT RED - high visibility, only where flood is detected
+        vis_params = {
+            'palette': ['#FF0000', '#FF3333', '#FF6666'],
+            'min': 0,
+            'max': 1,
+            'opacity': 0.85
+        }
         map_id_dict = flood.getMapId(vis_params)
         
         return {
