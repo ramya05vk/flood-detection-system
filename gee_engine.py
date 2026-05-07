@@ -147,10 +147,22 @@ class FloodPredictor:
             .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV')) \
             .select('VV').median()
         
-        current_water = current.lt(-15)
-        baseline_water = baseline.lt(-15)
+        current_water = current.lt(-18)
+        baseline_water = baseline.lt(-18)
         flood = current_water.updateMask(current_water.And(baseline_water.Not()))
         
+         # Add elevation filter (only low-lying areas)
+        dem = ee.Image('USGS/SRTMGL1_003').clip(roi)
+        low_elevation = dem.lt(50)  # Only areas below 50m
+        flood = flood.updateMask(low_elevation)
+
+         # Add slope filter (only flat areas)
+        slope = ee.Terrain.slope(dem)
+        flat_area = slope.lt(5)  # Only slopes < 5 degrees
+        flood = flood.updateMask(flat_area)
+
+        flood = flood.focal_min(1).focal_max(1)
+
         area = flood.multiply(ee.Image.pixelArea()).reduceRegion(
             reducer=ee.Reducer.sum(), geometry=roi, scale=30, maxPixels=1e9
         ).getInfo()
