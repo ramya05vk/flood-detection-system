@@ -71,9 +71,9 @@ class FloodPredictor:
         
         image = collection.median().clip(roi)
         ndwi = image.normalizedDifference(['B3', 'B8'])
-        water = ndwi.gt(0.3).selfMask()
+        water = ndwi.gt(0).selfMask()
         
-        vis_params = {'min': 0, 'max': 1, 'palette': ['#0000FF', '#1E90FF', '#00BFFF']}
+        vis_params = {'min': 0, 'max': 1, 'palette': ['#0000FF']}
         map_id_dict = water.getMapId(vis_params)
         
         # CRITICAL: Use tile_fetcher.url_format to get the correct tile URL
