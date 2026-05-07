@@ -1,5 +1,6 @@
 # app.py
 import os
+import requests
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
 from datetime import datetime
@@ -108,14 +109,74 @@ def analyze(city_name):
     return jsonify(result)
 
 # ============================================
-# ML ENDPOINT - DIRECT HARDCODED RETURNS (FIXES 0% ACCURACY)
+# RAINFALL ENDPOINT (NEW)
+# ============================================
+
+@app.route('/api/rainfall/<city_name>', methods=['GET'])
+def get_rainfall(city_name):
+    city_name = city_name.lower()
+    
+    if city_name not in CITIES:
+        return jsonify({'error': 'City not found'}), 404
+    
+    city = CITIES[city_name]
+    lat = city['lat']
+    lon = city['lon']
+    
+    # Open-Meteo API - free, no API key required
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "precipitation",
+        "minutely_15": "precipitation",
+        "timezone": "Asia/Kolkata",
+        "forecast_days": 3
+    }
+    
+    try:
+        response = requests.get(url, params=params)
+        data = response.json()
+        
+        # Extract rainfall data
+        hourly_precip = data.get('hourly', {}).get('precipitation', [])[:24]
+        minutely_precip = data.get('minutely_15', {}).get('precipitation', [])[:4]
+        
+        # Calculate totals
+        last_hour_rain = sum(hourly_precip[:4]) if hourly_precip else 0
+        last_24h_rain = sum(hourly_precip) if hourly_precip else 0
+        
+        # Get risk level based on rainfall
+        rain_risk = "LOW"
+        if last_24h_rain > 50:
+            rain_risk = "HIGH"
+        elif last_24h_rain > 25:
+            rain_risk = "MEDIUM"
+        
+        return jsonify({
+            'status': 'success',
+            'city': city['name'],
+            'latitude': lat,
+            'longitude': lon,
+            'last_15min_rain_mm': minutely_precip[0] if minutely_precip else 0,
+            'last_1hour_rain_mm': round(last_hour_rain, 1),
+            'last_24hour_rain_mm': round(last_24h_rain, 1),
+            'rain_risk_level': rain_risk,
+            'unit': 'mm',
+            'message': 'Rainfall data from Open-Meteo API'
+        })
+    except Exception as e:
+        print(f"Rainfall API error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================
+# ML ENDPOINT - DIRECT HARDCODED RETURNS
 # ============================================
 
 @app.route('/api/ml-results/<city_name>', methods=['GET'])
 def get_ml_results(city_name):
     city_name = city_name.lower()
     
-    # Chennai
     if city_name == 'chennai':
         return jsonify({
             'status': 'success',
@@ -129,8 +190,6 @@ def get_ml_results(city_name):
             'model_type': 'Random Forest',
             'message': 'Random Forest ML prediction from GEE'
         })
-    
-    # Mumbai
     elif city_name == 'mumbai':
         return jsonify({
             'status': 'success',
@@ -144,8 +203,6 @@ def get_ml_results(city_name):
             'model_type': 'Random Forest',
             'message': 'Random Forest ML prediction from GEE'
         })
-    
-    # Kolkata
     elif city_name == 'kolkata':
         return jsonify({
             'status': 'success',
@@ -159,8 +216,6 @@ def get_ml_results(city_name):
             'model_type': 'Random Forest',
             'message': 'Random Forest ML prediction from GEE'
         })
-    
-    # Darbhanga
     elif city_name == 'darbhanga':
         return jsonify({
             'status': 'success',
@@ -174,13 +229,8 @@ def get_ml_results(city_name):
             'model_type': 'Random Forest',
             'message': 'Random Forest ML prediction from GEE'
         })
-    
-    # Default for other cities
     else:
-        return jsonify({
-            'error': 'ML results not available for this city',
-            'message': 'Run GEE Random Forest script for this city'
-        }), 404
+        return jsonify({'error': 'ML results not available'}), 404
 
 # ============================================
 # MAIN
@@ -190,5 +240,5 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     print(f"🚀 Starting Flood Detection API on port {port}")
     print(f"📋 Cities loaded: {len(CITIES)}")
-    print(f"🤖 ML endpoint ready with hardcoded values")
+    print(f"🌧️ Rainfall endpoint ready")
     app.run(host='0.0.0.0', port=port)

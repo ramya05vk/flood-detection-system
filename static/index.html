@@ -14,11 +14,11 @@
         .header h1 span { color: #e94560; }
         .badge { background: #e94560; padding: 5px 10px; border-radius: 20px; font-size: 0.7rem; margin-left: 10px; }
         .container { display: flex; height: calc(100vh - 70px); }
-        .sidebar { width: 450px; background: #16213e; padding: 20px; overflow-y: auto; border-right: 1px solid #0f3460; }
+        .sidebar { width: 480px; background: #16213e; padding: 20px; overflow-y: auto; border-right: 1px solid #0f3460; }
         .map-container { flex: 1; position: relative; }
         #map { height: 100%; width: 100%; }
         .section-title { color: #e94560; margin: 15px 0 10px 0; font-size: 0.9rem; border-left: 3px solid #e94560; padding-left: 10px; }
-        .city-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-height: 280px; overflow-y: auto; }
+        .city-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; max-height: 250px; overflow-y: auto; }
         .city-btn { background: #0f3460; border: none; padding: 10px 15px; border-radius: 8px; color: white; cursor: pointer; text-align: left; transition: all 0.3s; width: 100%; }
         .city-btn:hover, .city-btn.active { background: #e94560; transform: translateX(5px); }
         .coastal-city { border-left: 3px solid #1e88e5; }
@@ -39,16 +39,15 @@
         .flood-area { font-size: 2rem; font-weight: bold; color: #e94560; text-align: center; }
         .historical-item { background: #0f3460; padding: 8px; border-radius: 6px; margin-bottom: 8px; font-size: 0.75rem; }
         .historical-date { color: #e94560; font-weight: bold; }
-        .map-controls { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 400px; }
+        .map-controls { position: absolute; bottom: 20px; right: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; display: flex; gap: 6px; flex-wrap: wrap; max-width: 450px; }
         .map-controls button { background: #0f3460; border: none; padding: 6px 10px; border-radius: 5px; color: white; cursor: pointer; font-size: 0.65rem; transition: all 0.2s; }
         .map-controls button:hover { background: #e94560; }
         .map-controls .active-layer { background: #e94560; border: 1px solid white; }
         .loading { text-align: center; padding: 20px; color: #e94560; }
         .legend { position: absolute; bottom: 20px; left: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; font-size: 0.7rem; line-height: 1.4; }
         .legend-color { display: inline-block; width: 20px; height: 10px; margin-right: 5px; }
-        .progress-bar { background: #1a1a3e; height: 6px; border-radius: 3px; margin-top: 3px; }
-        .progress-fill { background: #e94560; height: 6px; border-radius: 3px; }
         .ml-card { background: #1a1a3e; border-radius: 8px; padding: 10px; margin-top: 10px; border-left: 3px solid #e94560; }
+        .rainfall-card { background: #0f3460; border-radius: 8px; padding: 10px; margin-top: 10px; border-left: 3px solid #1e88e5; }
     </style>
 </head>
 <body>
@@ -57,7 +56,7 @@
             <h1>🌊 <span>FloodWatch</span> India</h1>
             <span class="badge">🤖 Random Forest ML</span>
             <span class="badge">🚀 Real-time Detection</span>
-            <span class="badge">📊 Vulnerability Scoring</span>
+            <span class="badge">🌧️ Live Rainfall</span>
         </div>
     </div>
     <div class="container">
@@ -70,12 +69,12 @@
             <div id="infoPanel">
                 <div class="info-panel">
                     <p>Select a city to view flood analysis.</p>
-                    <p style="font-size:0.7rem; margin-top:10px;">📊 <strong>Layers:</strong><br>
-                    • 🔴 FLOOD EXTENT - Actively flooded areas<br>
-                    • 💧 WATER BODIES - Permanent water (BLUE)<br>
-                    • 📡 SAR CURRENT - Current radar image<br>
-                    • 📡 SAR BEFORE - Normal conditions (90 days ago)<br>
-                    • 🖼️ TRUE COLOR - Satellite photo</p>
+                    <p style="font-size:0.7rem; margin-top:10px;">📊 <strong>Features:</strong><br>
+                    • 🔴 Flood extent detection<br>
+                    • 💧 Water body mapping<br>
+                    • 🤖 ML flood risk prediction<br>
+                    • 🌧️ Live rainfall data (last 24h)<br>
+                    • 📊 Vulnerability scoring</p>
                 </div>
             </div>
         </div>
@@ -99,7 +98,6 @@
     </div>
 
     <script>
-        // Initialize map
         var map = L.map('map').setView([23.5, 85.0], 5);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
             attribution: '&copy; OSM contributors'
@@ -109,7 +107,6 @@
         let currentCity = null;
         let currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
 
-        // Load cities from API
         async function loadCities() {
             try {
                 const response = await fetch('/api/cities');
@@ -138,7 +135,7 @@
         function addMarkers() {
             cities.forEach(city => {
                 const marker = L.marker([city.lat, city.lon]).addTo(map);
-                marker.bindPopup(`<b>${city.name}</b><br>${city.state}<br><button onclick="selectCityByName('${city.name}')" style="background:#e94560; border:none; padding:5px 10px; border-radius:5px; color:white; cursor:pointer;">Analyze</button>`);
+                marker.bindPopup(`<b>${city.name}</b><br>${city.state}<br><button onclick="selectCityByName('${city.name}')">Analyze</button>`);
             });
         }
 
@@ -148,11 +145,11 @@
         };
 
         function clearAllLayers() {
-            if (currentLayers.truecolor) map.removeLayer(currentLayers.truecolor);
-            if (currentLayers.water) map.removeLayer(currentLayers.water);
-            if (currentLayers.before) map.removeLayer(currentLayers.before);
-            if (currentLayers.current) map.removeLayer(currentLayers.current);
-            if (currentLayers.flood) map.removeLayer(currentLayers.flood);
+            if (currentLayers.truecolor && map.hasLayer(currentLayers.truecolor)) map.removeLayer(currentLayers.truecolor);
+            if (currentLayers.water && map.hasLayer(currentLayers.water)) map.removeLayer(currentLayers.water);
+            if (currentLayers.before && map.hasLayer(currentLayers.before)) map.removeLayer(currentLayers.before);
+            if (currentLayers.current && map.hasLayer(currentLayers.current)) map.removeLayer(currentLayers.current);
+            if (currentLayers.flood && map.hasLayer(currentLayers.flood)) map.removeLayer(currentLayers.flood);
         }
 
         function setActiveLayer(layerType) {
@@ -217,7 +214,7 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-label">ML Model Accuracy</div>
-                        <div class="stat-value">${data.ml_accuracy_percent || (data.ml_accuracy * 100).toFixed(1) + '%'}</div>
+                        <div class="stat-value">${data.ml_accuracy_percent}</div>
                     </div>
                     <div style="font-size: 0.7rem; color: #888; margin-top: 10px;">
                         📡 Sentinel-1 SAR<br>
@@ -227,11 +224,66 @@
                     <button onclick="document.getElementById('mlPanel').remove()" style="margin-top: 10px; background: #333; border: none; padding: 5px 10px; border-radius: 5px; color: white; cursor: pointer;">Close</button>
                 `;
             } catch (error) {
+                console.error('ML error:', error);
                 alert('ML results not available: ' + error.message);
             }
         }
 
         window.showMLResults = showMLResults;
+
+        async function loadRainfallData(cityName) {
+            try {
+                const response = await fetch(`/api/rainfall/${cityName.toLowerCase()}`);
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error);
+                
+                const rainRiskClass = data.rain_risk_level === 'HIGH' ? 'risk-high' : data.rain_risk_level === 'MEDIUM' ? 'risk-medium' : 'risk-normal';
+                
+                let rainfallPanel = document.getElementById('rainfallPanel');
+                if (!rainfallPanel) {
+                    rainfallPanel = document.createElement('div');
+                    rainfallPanel.id = 'rainfallPanel';
+                    // Insert after ML panel or at the bottom of info panel
+                    const infoPanel = document.getElementById('infoPanel');
+                    if (infoPanel) {
+                        infoPanel.appendChild(rainfallPanel);
+                    }
+                }
+                
+                rainfallPanel.innerHTML = `
+                    <div class="section-title" style="margin-top: 15px;">🌧️ Live Rainfall Data</div>
+                    <div class="rainfall-card">
+                        <div class="stat-grid">
+                            <div class="stat-card">
+                                <div class="stat-value">${data.last_15min_rain_mm} mm</div>
+                                <div class="stat-label">Last 15 min</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${data.last_1hour_rain_mm} mm</div>
+                                <div class="stat-label">Last 1 hour</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value">${data.last_24hour_rain_mm} mm</div>
+                                <div class="stat-label">Last 24 hours</div>
+                            </div>
+                        </div>
+                        <div style="text-align: center; margin-top: 8px;">
+                            <span class="risk-tag ${rainRiskClass}">${data.rain_risk_level} RAIN RISK</span>
+                        </div>
+                        <div style="font-size: 0.7rem; color: #888; margin-top: 8px; text-align: center;">
+                            Source: Open-Meteo API | Updates every 15 min
+                        </div>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Rainfall error:', error);
+                let rainfallPanel = document.getElementById('rainfallPanel');
+                if (rainfallPanel) {
+                    rainfallPanel.innerHTML = `<div class="stat-card" style="color:#e94560;">⚠️ Rainfall data unavailable</div>`;
+                }
+            }
+        }
 
         async function selectCity(city) {
             currentCity = city;
@@ -250,60 +302,47 @@
                 
                 if (data.error) throw new Error(data.error);
                 
-                console.log("API Response received:", data);
-                console.log("Maps object:", data.maps);
+                console.log("API Response received");
+                console.log("Maps keys:", Object.keys(data.maps || {}));
                 
-                // Create layers using tile_url (NOT token)
+                currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
+                
                 if (data.maps && data.maps.flood_extent && data.maps.flood_extent.tile_url) {
-                    currentLayers.flood = L.tileLayer(data.maps.flood_extent.tile_url, { 
-                        opacity: 0.8,
-                        attribution: 'Flood Extent'
-                    });
-                    console.log("✅ Flood layer created with URL:", data.maps.flood_extent.tile_url);
-                } else {
-                    console.log("❌ Flood extent tile_url not found");
+                    currentLayers.flood = L.tileLayer(data.maps.flood_extent.tile_url, { opacity: 0.8 });
+                    console.log("✅ Flood layer created");
                 }
                 
                 if (data.maps && data.maps.water_bodies && data.maps.water_bodies.tile_url) {
-                    currentLayers.water = L.tileLayer(data.maps.water_bodies.tile_url, { 
-                        opacity: 0.7,
-                        attribution: 'Water Bodies'
-                    });
+                    currentLayers.water = L.tileLayer(data.maps.water_bodies.tile_url, { opacity: 0.7 });
                     console.log("✅ Water bodies layer created");
                 }
                 
                 if (data.maps && data.maps.sar_current && data.maps.sar_current.tile_url) {
-                    currentLayers.current = L.tileLayer(data.maps.sar_current.tile_url, {
-                        attribution: 'SAR Current'
-                    });
+                    currentLayers.current = L.tileLayer(data.maps.sar_current.tile_url);
                     console.log("✅ SAR Current layer created");
                 }
                 
                 if (data.maps && data.maps.sar_before && data.maps.sar_before.tile_url) {
-                    currentLayers.before = L.tileLayer(data.maps.sar_before.tile_url, {
-                        attribution: 'SAR Before'
-                    });
+                    currentLayers.before = L.tileLayer(data.maps.sar_before.tile_url);
                     console.log("✅ SAR Before layer created");
                 }
                 
                 if (data.maps && data.maps.true_color && data.maps.true_color.tile_url) {
-                    currentLayers.truecolor = L.tileLayer(data.maps.true_color.tile_url, {
-                        attribution: 'True Color'
-                    });
+                    currentLayers.truecolor = L.tileLayer(data.maps.true_color.tile_url);
                     console.log("✅ True Color layer created");
                 }
                 
-                // Activate flood layer by default
                 if (currentLayers.flood) {
                     setActiveLayer('flood');
-                } else {
-                    console.log("⚠️ No flood layer available");
                 }
                 
                 displayAnalysis(data);
                 
+                // Load rainfall data after city selection
+                await loadRainfallData(city.name);
+                
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Error selecting city:', error);
                 document.getElementById('infoPanel').innerHTML = `<div class="info-panel"><p style="color:#e94560;">❌ Error: ${error.message}</p></div>`;
             }
         }
