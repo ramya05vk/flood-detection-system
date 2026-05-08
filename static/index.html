@@ -6,6 +6,7 @@
     <title>FloodWatch India - Real-time Flood Monitoring</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0a0a1a; color: #eee; }
@@ -14,7 +15,7 @@
         .header h1 span { color: #e94560; }
         .badge { background: #e94560; padding: 5px 10px; border-radius: 20px; font-size: 0.7rem; margin-left: 10px; }
         .container { display: flex; height: calc(100vh - 70px); }
-        .sidebar { width: 480px; background: #16213e; padding: 20px; overflow-y: auto; border-right: 1px solid #0f3460; }
+        .sidebar { width: 500px; background: #16213e; padding: 20px; overflow-y: auto; border-right: 1px solid #0f3460; }
         .map-container { flex: 1; position: relative; }
         #map { height: 100%; width: 100%; }
         .section-title { color: #e94560; margin: 15px 0 10px 0; font-size: 0.9rem; border-left: 3px solid #e94560; padding-left: 10px; }
@@ -25,7 +26,7 @@
         .city-name { font-weight: bold; font-size: 1rem; }
         .city-state { font-size: 0.7rem; opacity: 0.7; }
         .coastal-tag { font-size: 0.6rem; background: #1e88e5; padding: 2px 6px; border-radius: 10px; margin-left: 8px; }
-        .info-panel { background: #0f0f1a; border-radius: 12px; padding: 15px; margin-top: 15px; max-height: 60vh; overflow-y: auto; }
+        .info-panel { background: #0f0f1a; border-radius: 12px; padding: 15px; margin-top: 15px; max-height: 50vh; overflow-y: auto; }
         .risk-tag { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: bold; }
         .risk-critical { background: #8b0000; color: white; }
         .risk-high { background: #e94560; color: white; }
@@ -46,8 +47,11 @@
         .loading { text-align: center; padding: 20px; color: #e94560; }
         .legend { position: absolute; bottom: 20px; left: 20px; z-index: 1000; background: #0f0f1a; padding: 10px; border-radius: 8px; font-size: 0.7rem; line-height: 1.4; }
         .legend-color { display: inline-block; width: 20px; height: 10px; margin-right: 5px; }
-        .ml-card { background: #1a1a3e; border-radius: 8px; padding: 10px; margin-top: 10px; border-left: 3px solid #e94560; }
         .rainfall-card { background: #0f3460; border-radius: 8px; padding: 10px; margin-top: 10px; border-left: 3px solid #1e88e5; }
+        .chart-container { background: #0f3460; border-radius: 8px; padding: 10px; margin-top: 10px; }
+        .email-input { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 5px; border: none; background: #1a1a3e; color: white; }
+        .subscribe-btn { width: 100%; background: #e94560; border: none; padding: 8px; border-radius: 5px; color: white; cursor: pointer; font-size: 0.8rem; }
+        .subscribe-btn:hover { opacity: 0.9; }
     </style>
 </head>
 <body>
@@ -57,6 +61,8 @@
             <span class="badge">🤖 Random Forest ML</span>
             <span class="badge">🚀 Real-time Detection</span>
             <span class="badge">🌧️ Live Rainfall</span>
+            <span class="badge">📧 Email Alerts</span>
+            <span class="badge">📈 Trend Analysis</span>
         </div>
     </div>
     <div class="container">
@@ -64,6 +70,14 @@
             <h3>📍 Flood-Prone Cities</h3>
             <div class="city-list" id="cityList">
                 <div class="loading">Loading cities...</div>
+            </div>
+
+            <!-- Email Subscription Box -->
+            <div class="section-title" style="margin-top: 10px;">📧 Email Alerts</div>
+            <div class="stat-card">
+                <input type="email" id="alertEmail" class="email-input" placeholder="Enter your email address">
+                <button onclick="subscribeAlerts()" class="subscribe-btn">🔔 Subscribe to Alerts</button>
+                <p style="font-size: 0.6rem; color: #888; margin-top: 8px; text-align: center;">Get email alerts when flood risk is HIGH or CRITICAL</p>
             </div>
             
             <div id="infoPanel">
@@ -74,6 +88,8 @@
                     • 💧 Water body mapping<br>
                     • 🤖 ML flood risk prediction<br>
                     • 🌧️ Live rainfall data (last 24h)<br>
+                    • 📈 Flood trend analysis<br>
+                    • 📧 Email alerts<br>
                     • 📊 Vulnerability scoring</p>
                 </div>
             </div>
@@ -106,6 +122,44 @@
         let cities = [];
         let currentCity = null;
         let currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
+        let floodChart = null;
+        let subscribedEmail = localStorage.getItem('alert_email') || '';
+
+        if (subscribedEmail) {
+            document.getElementById('alertEmail').value = subscribedEmail;
+        }
+
+        function subscribeAlerts() {
+            const email = document.getElementById('alertEmail').value;
+            if (!email) {
+                alert('Please enter your email address');
+                return;
+            }
+            localStorage.setItem('alert_email', email);
+            alert(`✅ Alerts will be sent to ${email} when flood risk is HIGH`);
+        }
+
+        async function sendFloodAlert(city, risk_level, flooded_area) {
+            const email = localStorage.getItem('alert_email');
+            if (email && (risk_level === 'HIGH' || risk_level === 'CRITICAL')) {
+                try {
+                    const response = await fetch('/api/send-alert', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            email: email,
+                            city: city,
+                            risk_level: risk_level,
+                            flooded_area: flooded_area
+                        })
+                    });
+                    const data = await response.json();
+                    console.log('Alert sent:', data);
+                } catch (error) {
+                    console.error('Alert error:', error);
+                }
+            }
+        }
 
         async function loadCities() {
             try {
@@ -159,23 +213,18 @@
             if (layerType === 'flood' && currentLayers.flood) {
                 currentLayers.flood.addTo(map);
                 document.getElementById('btnFlood').classList.add('active-layer');
-                console.log("✅ FLOOD EXTENT layer activated");
             } else if (layerType === 'water' && currentLayers.water) {
                 currentLayers.water.addTo(map);
                 document.getElementById('btnWater').classList.add('active-layer');
-                console.log("✅ WATER BODIES layer activated");
             } else if (layerType === 'current' && currentLayers.current) {
                 currentLayers.current.addTo(map);
                 document.getElementById('btnCurrent').classList.add('active-layer');
-                console.log("✅ SAR CURRENT layer activated");
             } else if (layerType === 'before' && currentLayers.before) {
                 currentLayers.before.addTo(map);
                 document.getElementById('btnBefore').classList.add('active-layer');
-                console.log("✅ SAR BEFORE layer activated");
             } else if (layerType === 'truecolor' && currentLayers.truecolor) {
                 currentLayers.truecolor.addTo(map);
                 document.getElementById('btnTrue').classList.add('active-layer');
-                console.log("✅ TRUE COLOR layer activated");
             }
         }
 
@@ -216,11 +265,6 @@
                         <div class="stat-label">ML Model Accuracy</div>
                         <div class="stat-value">${data.ml_accuracy_percent}</div>
                     </div>
-                    <div style="font-size: 0.7rem; color: #888; margin-top: 10px;">
-                        📡 Sentinel-1 SAR<br>
-                        🌲 Random Forest (100 trees)<br>
-                        🎯 Features: VV, VH, Elevation, Slope
-                    </div>
                     <button onclick="document.getElementById('mlPanel').remove()" style="margin-top: 10px; background: #333; border: none; padding: 5px 10px; border-radius: 5px; color: white; cursor: pointer;">Close</button>
                 `;
             } catch (error) {
@@ -244,7 +288,6 @@
                 if (!rainfallPanel) {
                     rainfallPanel = document.createElement('div');
                     rainfallPanel.id = 'rainfallPanel';
-                    // Insert after ML panel or at the bottom of info panel
                     const infoPanel = document.getElementById('infoPanel');
                     if (infoPanel) {
                         infoPanel.appendChild(rainfallPanel);
@@ -271,17 +314,90 @@
                         <div style="text-align: center; margin-top: 8px;">
                             <span class="risk-tag ${rainRiskClass}">${data.rain_risk_level} RAIN RISK</span>
                         </div>
-                        <div style="font-size: 0.7rem; color: #888; margin-top: 8px; text-align: center;">
-                            Source: Open-Meteo API | Updates every 15 min
-                        </div>
                     </div>
                 `;
             } catch (error) {
                 console.error('Rainfall error:', error);
-                let rainfallPanel = document.getElementById('rainfallPanel');
-                if (rainfallPanel) {
-                    rainfallPanel.innerHTML = `<div class="stat-card" style="color:#e94560;">⚠️ Rainfall data unavailable</div>`;
+            }
+        }
+
+        async function loadFloodHistory(cityName) {
+            try {
+                const response = await fetch(`/api/flood-history/${cityName.toLowerCase()}`);
+                const data = await response.json();
+                
+                const ctx = document.getElementById('floodTrendChart');
+                if (!ctx) return;
+                
+                const canvasCtx = ctx.getContext('2d');
+                
+                if (floodChart) {
+                    floodChart.destroy();
                 }
+                
+                floodChart = new Chart(canvasCtx, {
+                    type: 'line',
+                    data: {
+                        labels: data.dates,
+                        datasets: [
+                            {
+                                label: 'Flooded Area (hectares)',
+                                data: data.flooded_areas,
+                                borderColor: '#e94560',
+                                backgroundColor: 'rgba(233, 69, 96, 0.1)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4,
+                                pointBackgroundColor: '#e94560'
+                            },
+                            {
+                                label: 'Rainfall (mm)',
+                                data: data.rainfall,
+                                borderColor: '#1e88e5',
+                                backgroundColor: 'rgba(30, 136, 229, 0.1)',
+                                borderWidth: 2,
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4,
+                                pointBackgroundColor: '#1e88e5',
+                                yAxisID: 'y1'
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { position: 'top', labels: { color: '#eee', font: { size: 10 } } },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        scales: {
+                            x: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: '#1a1a3e' } },
+                            y: { title: { display: true, text: 'Flooded Area (ha)', color: '#e94560', font: { size: 10 } }, ticks: { color: '#888' }, grid: { color: '#1a1a3e' } },
+                            y1: { position: 'right', title: { display: true, text: 'Rainfall (mm)', color: '#1e88e5', font: { size: 10 } }, ticks: { color: '#888' }, grid: { drawOnChartArea: false } }
+                        }
+                    }
+                });
+                
+                const trendIcon = data.trend === 'increasing' ? '📈' : (data.trend === 'decreasing' ? '📉' : '➡️');
+                const trendColor = data.trend === 'increasing' ? '#e94560' : (data.trend === 'decreasing' ? '#2e8b57' : '#ffa500');
+                
+                let trendInfo = document.getElementById('trendInfo');
+                if (!trendInfo) {
+                    const chartContainer = document.getElementById('chartContainer');
+                    if (chartContainer) {
+                        trendInfo = document.createElement('div');
+                        trendInfo.id = 'trendInfo';
+                        trendInfo.style.cssText = 'margin-top: 10px; font-size: 0.7rem; text-align: center;';
+                        chartContainer.appendChild(trendInfo);
+                    }
+                }
+                if (trendInfo) {
+                    trendInfo.innerHTML = `<span style="color: ${trendColor};">${trendIcon} Trend: ${data.trend.toUpperCase()}</span> | Change: ${data.percent_change > 0 ? '+' : ''}${data.percent_change}%<br>Based on last 5 satellite passes (2 months)`;
+                }
+            } catch (error) {
+                console.error('Chart error:', error);
             }
         }
 
@@ -302,47 +418,36 @@
                 
                 if (data.error) throw new Error(data.error);
                 
-                console.log("API Response received");
-                console.log("Maps keys:", Object.keys(data.maps || {}));
-                
                 currentLayers = { truecolor: null, water: null, before: null, current: null, flood: null };
                 
                 if (data.maps && data.maps.flood_extent && data.maps.flood_extent.tile_url) {
                     currentLayers.flood = L.tileLayer(data.maps.flood_extent.tile_url, { opacity: 0.8 });
-                    console.log("✅ Flood layer created");
                 }
-                
                 if (data.maps && data.maps.water_bodies && data.maps.water_bodies.tile_url) {
                     currentLayers.water = L.tileLayer(data.maps.water_bodies.tile_url, { opacity: 0.7 });
-                    console.log("✅ Water bodies layer created");
                 }
-                
                 if (data.maps && data.maps.sar_current && data.maps.sar_current.tile_url) {
                     currentLayers.current = L.tileLayer(data.maps.sar_current.tile_url);
-                    console.log("✅ SAR Current layer created");
                 }
-                
                 if (data.maps && data.maps.sar_before && data.maps.sar_before.tile_url) {
                     currentLayers.before = L.tileLayer(data.maps.sar_before.tile_url);
-                    console.log("✅ SAR Before layer created");
                 }
-                
                 if (data.maps && data.maps.true_color && data.maps.true_color.tile_url) {
                     currentLayers.truecolor = L.tileLayer(data.maps.true_color.tile_url);
-                    console.log("✅ True Color layer created");
                 }
                 
-                if (currentLayers.flood) {
-                    setActiveLayer('flood');
-                }
+                if (currentLayers.flood) setActiveLayer('flood');
                 
                 displayAnalysis(data);
-                
-                // Load rainfall data after city selection
                 await loadRainfallData(city.name);
+                await loadFloodHistory(city.name);
+                
+                if (data.risk_level === 'HIGH' || data.risk_level === 'CRITICAL') {
+                    await sendFloodAlert(city.name, data.risk_level, data.flooded_area_hectares);
+                }
                 
             } catch (error) {
-                console.error('Error selecting city:', error);
+                console.error('Error:', error);
                 document.getElementById('infoPanel').innerHTML = `<div class="info-panel"><p style="color:#e94560;">❌ Error: ${error.message}</p></div>`;
             }
         }
@@ -415,11 +520,18 @@
                     ${vulnHtml}
                     ${historicalHtml}
                     
+                    <div class="section-title">📈 Flood Trend Analysis</div>
+                    <div id="chartContainer" class="chart-container">
+                        <canvas id="floodTrendChart" style="width:100%; max-height:200px;"></canvas>
+                        <div id="trendInfo" style="margin-top: 10px; font-size: 0.7rem; text-align: center;"></div>
+                    </div>
+                    
+                    <div id="rainfallPanel"></div>
+                    
                     <div class="stat-card" style="margin-top: 10px;">
                         <div style="font-size: 0.7rem; color: #888;">
                             Analysis Date: ${data.analysis_date}<br>
-                            Data: Sentinel-1 SAR + Sentinel-2<br>
-                            Click layer buttons on map to view satellite images
+                            Data: Sentinel-1 SAR + Sentinel-2
                         </div>
                     </div>
                 </div>
